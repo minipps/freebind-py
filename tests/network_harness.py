@@ -324,6 +324,12 @@ class NetworkHarness:
         if not ready:
             raise TimeoutError(f"peer servers did not become ready within {self.ready_timeout:g}s")
         line = self._peer.stdout.readline()
+        if not line and self._peer.poll() is not None:
+            stderr = self._peer.stderr.read().strip() if self._peer.stderr is not None else ""
+            detail = f": {stderr}" if stderr else ""
+            raise RuntimeError(
+                f"peer server exited with status {self._peer.returncode} before readiness{detail}"
+            )
         try:
             status = json.loads(line)
         except json.JSONDecodeError as exc:
