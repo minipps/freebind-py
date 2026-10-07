@@ -1,0 +1,102 @@
+name: tests
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  unit:
+    name: CPython ${{ matrix.python-version }} / ${{ matrix.dependencies }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13", "3.14"]
+        dependencies: [minimum, newest]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install minimum allowed clients
+        if: matrix.dependencies == 'minimum'
+        run: |
+          python -m venv .venv
+          .venv/bin/python -m pip install --editable . \
+            "requests==2.34.2" "urllib3==2.7" "aiohttp==3.13.5" \
+            "httpx==0.28.1" "httpcore==1.0.9" "anyio==4.10"
+      - name: Install newest allowed clients
+        if: matrix.dependencies == 'newest'
+        run: |
+          python -m venv .venv
+          .venv/bin/python -m pip install --editable ".[all]"
+      - name: Run unit suite
+        run: .venv/bin/python -m unittest discover -s tests -v
+      - name: Check runnable examples
+        run: |
+          for example in examples/requests_client.py examples/aiohttp_client.py examples/httpx_client.py examples/patch.py; do
+            .venv/bin/python "$example" --help >/dev/null
+          done
+
+  namespace:
+    name: Namespace parity / ${{ matrix.dependencies }} clients
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        dependencies: [minimum, newest]
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install namespace tools if missing
+        run: |
+          if ! command -v ip >/dev/null 2>&1 || ! command -v unshare >/dev/null 2>&1 || ! command -v setpriv >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install --yes iproute2 util-linux
+          fi
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+      - name: Install minimum allowed clients
+        if: matrix.dependencies == 'minimum'
+        run: |
+          python -m venv .venv
+          .venv/bin/python -m pip install --editable . \
+            "requests==2.34.2" "urllib3==2.7" "aiohttp==3.13.5" \
+            "httpx==0.28.1" "httpcore==1.0.9" "anyio==4.10"
+      - name: Install newest allowed clients
+        if: matrix.dependencies == 'newest'
+        run: |
+          python -m venv .venv
+          .venv/bin/python -m pip install --editable ".[all]"
+      - name: Run real namespace parity suite with capabilities dropped for clients
+        run: |
+          python_path="$GITHUB_WORKSPACE/.venv/bin/python"
+          sudo "$python_path" tests/network_harness.py -- \
+            "$python_path" -m unittest discover -s tests -p test_network.py -v
+
+  arm64:
+    name: ARM64 Linux smoke
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+      - name: Install newest allowed clients
+        run: |
+          python -m venv .venv
+          .venv/bin/python -m pip install --editable ".[all]"
+      - name: Run unit suite
+        run: .venv/bin/python -m unittest discover -s tests -v
+      - name: Check runnable examples
+        run: |
+          for example in examples/requests_client.py examples/aiohttp_client.py examples/httpx_client.py examples/patch.py; do
+            .venv/bin/python "$example" --help >/dev/null
+          done
