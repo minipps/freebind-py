@@ -31,15 +31,16 @@ with success. Owners remain unassigned until actual dispatch.
 | T17 | HTTPX sync backend and transport | T07 | done | httpx | d042e7b reviewed; five checks on both dependency environments |
 | T18 | HTTPX asyncio backend and transport | T08, T17 | done | httpx | Reviewed; 13 HTTPX checks pass with AnyIO 4.10/4.15 incl ownership |
 | T19 | HTTPX fresh connections | T18 | done | httpx | Reviewed; 16 sync/async checks on min/newest incl fresh streams/retries |
-| T20 | Cross-adapter failure and isolation checks | T13, T15, T16, T19 | pending | — | Paused before implementation; initial contract review only, no draft files |
+| T20 | Cross-adapter failure and isolation checks | T13, T15, T16, T19 | done | contract_resume | Reviewed; four cross-area checks and 100 full checks pass on min/newest |
 | T21 | Isolated namespace harness | T06 | done | namespace | Reviewed; real v4/v6 smoke, zero client capabilities and failure cleanup pass |
-| T22 | End-to-end parity suite | T09, T12, T20, T21 | pending | — | — |
+| T22 | End-to-end parity suite | T09, T12, T20, T21 | in_progress | network_parity | Reserved tests/test_network.py; dependencies integrated |
 | T23 | Compatibility CI and usage documentation | T22 | pending | — | — |
 | T24 | Build and smoke-test release artifacts | T23 | pending | — | — |
 
 ## Stable checkpoint — 2026-10-07
 
-Work paused at the user's request for poweroff. T01–T19 and T21 are
+Historical checkpoint: work paused at the user's request for poweroff.
+Work has now resumed; the task ledger above is current. T01–T19 and T21 are
 implemented, reviewed, and committed. No worker retains a file reservation.
 T21 is committed as `df59fa2`; the following documentation checkpoint records
 this handoff. T20 and T22–T24 remain unfinished; no release artifacts have been
@@ -64,7 +65,8 @@ file; its agent only reviewed existing contracts. Review note to consider there:
 programmatic `patch()` currently defers interface-name validation to socket
 preparation, while `patch_from_env()` validates before installation. Decide
 whether to validate programmatic patch configuration early and cover it with a
-focused check. No related implementation change has been made.
+focused check. Resolved on resume in `734d256`: the shared programmatic patch installer now
+validates interface names before installing hooks.
 
 Local ignored environments are ready: `.venv` (Python 3.13/newest), `.venv-min`
 (Python 3.13/minimum), and `.venv-3.11`, `.venv-3.12`, `.venv-3.14` (newest).

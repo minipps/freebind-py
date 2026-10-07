@@ -1,9 +1,9 @@
 # Freebind Python implementation documents
 
 Start with [PLAN.md](PLAN.md), then choose work from [TASKS.md](TASKS.md). These
-documents preserve the research and decisions agreed on 2026-10-07. T01–T19 and T21 are implemented and committed. Work is paused at a stable
-checkpoint; see the resume notes in [TASKS.md](TASKS.md). T20 and T22–T24
-remain unfinished.
+documents preserve the research and decisions agreed on 2026-10-07. T01–T21 are implemented and committed. Work has resumed from the stable
+checkpoint; current assignments and evidence are in [TASKS.md](TASKS.md).
+T22–T24 remain unfinished.
 
 ## Document responsibilities
 
