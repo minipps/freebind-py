@@ -1,9 +1,10 @@
 # Freebind Python implementation documents
 
 Start with [PLAN.md](PLAN.md), then choose work from [TASKS.md](TASKS.md). These
-documents preserve the research and decisions agreed on 2026-10-07. T01–T23
-are implemented, reviewed, committed, and pushed. T24 artifact validation is
-in progress; current assignments and evidence are in [TASKS.md](TASKS.md).
+documents preserve the research and decisions agreed on 2026-10-07. T01–T24
+are implemented and reviewed; implementation slices are committed and pushed.
+Wheel/source artifacts and clean-install checks passed without publication.
+Acceptance evidence is in [TASKS.md](TASKS.md).
 
 ## Document responsibilities
 

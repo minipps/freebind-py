@@ -35,11 +35,11 @@ with success. Owners remain unassigned until actual dispatch.
 | T21 | Isolated namespace harness | T06 | done | namespace | Reviewed; real v4/v6 smoke, zero client capabilities and failure cleanup pass |
 | T22 | End-to-end parity suite | T09, T12, T20, T21 | done | network_parity | Reviewed; eight real namespace checks pass on min/newest, zero skips/capabilities |
 | T23 | Compatibility CI and usage documentation | T22 | done | ci_examples + usage_docs | Reviewed; hosted run 37684168659 passes all 11 jobs, both namespace jobs run eight tests with zero skips/capabilities; examples pass real HTTPS/TCP |
-| T24 | Build and smoke-test release artifacts | T23 | in_progress | artifacts | Hosted integration gate passed; wheel/sdist and clean independent installations under review |
+| T24 | Build and smoke-test release artifacts | T23 | done | artifacts | Reviewed; v0.1.0 wheel/sdist built; six clean installations pass exports, site-packages isolation, and independent optional dependencies |
 
 ## Current validation — 2026-10-07
 
-T01–T23 are implemented, reviewed, committed, and pushed.
+T01–T24 are implemented and reviewed; implementation slices are committed and pushed.
 [Hosted CI run 37684168659](https://github.com/minipps/freebind-py/actions/runs/37684168659)
 passes all 11 jobs: CPython 3.11–3.14 with minimum/newest clients, ARM64
 unit/example smoke, and both real namespace suites. Each namespace job ran
@@ -53,6 +53,35 @@ checks; the patch example passed its TCP source check.
 Hosted setup uses system Python 3.12 and sudo; the peer and clients drop to
 the invoking UID/GID and discard all capabilities. This avoids runner-owned
 checkout permission failures after dropping root capabilities.
+
+
+### Release artifacts
+
+Built with `uv build --sdist --wheel --out-dir dist` on CPython 3.14.7:
+
+- `dist/freebind_py-0.1.0-py3-none-any.whl`: eight intended package files,
+  typing marker, README metadata, and GPL license; SHA256
+  `a1edc6070da195d8e8575127167a69a57658e27bde12ebbf3cf461a0023012a1`.
+- `dist/freebind_py-0.1.0.tar.gz`: package, metadata/license/README, five examples,
+  complete network harness/test assets, and workflow; SHA256
+  `b25d2d6f9de4c391370f29e582e50ff391e03217e2cba1d0c3e3bfd5b173cecb`.
+
+Metadata inspection confirmed `freebind-py`, `0.1.0`, Python `>=3.11`,
+`GPL-3.0-only`, and extras `requests`, `aiohttp`, `httpx`, `all`. The reviewed
+three-line `MANIFEST.in` ensures runnable source material accompanies the tests.
+
+Created six separate noneditable environments under ignored `dist/smoke/`.
+Installed the wheel with `uv pip install --python <env>/bin/python <wheel>`
+for base and `<wheel>[<extra>]` independently for each extra, then installed
+`<sdist>` into the sixth environment. All six installations succeeded. Each ran
+`<env>/bin/python -I -B <absolute dist/smoke/check.py> <mode>` from an isolated
+working directory. All 11 core exports resolved from the environment's
+site-packages; each extra imported its adapter and only its expected optional
+clients. Base and sdist installations contained no optional clients. Coordinator
+independently repeated all six smoke checks successfully.
+
+Artifacts are local and ignored; nothing was published. No implementation or
+release-acceptance blockers remain.
 
 ## Historical stable checkpoint — 2026-10-07
 
