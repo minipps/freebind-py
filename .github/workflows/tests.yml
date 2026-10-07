@@ -53,26 +53,20 @@ jobs:
         dependencies: [minimum, newest]
     steps:
       - uses: actions/checkout@v7
-      - name: Install namespace tools if missing
+      - name: Install namespace tools and system Python venv
         run: |
-          if ! command -v ip >/dev/null 2>&1 || ! command -v unshare >/dev/null 2>&1 || ! command -v setpriv >/dev/null 2>&1; then
-            sudo apt-get update
-            sudo apt-get install --yes iproute2 util-linux
-          fi
-      - uses: actions/setup-python@v7
-        with:
-          python-version: "3.14"
+          sudo apt-get update
+          sudo apt-get install --yes iproute2 util-linux python3.12-venv
+          /usr/bin/python3.12 -m venv .venv
       - name: Install minimum allowed clients
         if: matrix.dependencies == 'minimum'
         run: |
-          python -m venv .venv
           .venv/bin/python -m pip install --editable . \
             "requests==2.34.2" "urllib3==2.7" "aiohttp==3.13.5" \
             "httpx==0.28.1" "httpcore==1.0.9" "anyio==4.10"
       - name: Install newest allowed clients
         if: matrix.dependencies == 'newest'
         run: |
-          python -m venv .venv
           .venv/bin/python -m pip install --editable ".[all]"
       - name: Run real namespace parity suite with capabilities dropped for clients
         run: |
