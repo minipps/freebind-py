@@ -44,6 +44,13 @@ class PatchLifecycleTests(unittest.TestCase):
         self.assertIsNone(_patch._ACTIVE_PATCH)
         self.assert_restored()
 
+    def test_invalid_programmatic_interface_fails_before_installation(self):
+        with self.assertRaises(ValueError):
+            _patch.patch(Source("192.0.2.8", interface=""))
+
+        self.assertIsNone(_patch._ACTIVE_PATCH)
+        self.assert_restored()
+
     def test_context_restores_after_exception(self):
         with self.assertRaisesRegex(ValueError, "original failure"):
             with _patch.patch(Source("192.0.2.8")):

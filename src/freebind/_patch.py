@@ -159,6 +159,7 @@ def patch(
         raise TypeError("source must be a Source")
     if entrypoint not in ("connect", "socket"):
         raise ValueError("entrypoint must be 'connect' or 'socket'")
+    _socket._validate_interface(source.interface)
 
     handle = PatchHandle(source, entrypoint=entrypoint, socket_types=socket_types)
     with _PATCH_LOCK:
@@ -220,6 +221,5 @@ def patch_from_env() -> PatchHandle:
         raise ValueError("FREEBIND_ENTRYPOINT must be socket or connect")
 
     interface = os.environ.get("FREEBIND_IFACE")
-    _socket._validate_interface(interface)
     source = Source(prefixes, interface=interface)
     return patch(source, entrypoint=entrypoint, socket_types=socket_types)
