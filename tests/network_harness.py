@@ -27,7 +27,7 @@ import sys
 import threading
 import time
 from typing import Sequence
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -68,6 +68,20 @@ def _capabilities() -> dict[str, int]:
 def _has_capability(name: str) -> bool:
     bit = {"CAP_NET_ADMIN": 12, "CAP_SYS_ADMIN": 21}[name]
     return bool(_capabilities().get("CapEff", 0) & (1 << bit))
+
+
+def _setpriv_identity_args() -> list[str]:
+    if os.geteuid() != 0 or not (_has_capability("CAP_NET_ADMIN") and _has_capability("CAP_SYS_ADMIN")):
+        return []
+    try:
+        if os.stat("/proc/self/ns/user").st_ino != os.stat("/proc/1/ns/user").st_ino:
+            return []
+    except OSError:
+        return []
+    uid, gid = os.environ.get("SUDO_UID", ""), os.environ.get("SUDO_GID", "")
+    if not uid.isascii() or not uid.isdecimal() or not gid.isascii() or not gid.isdecimal() or int(uid) == 0:
+        return []
+    return [f"--reuid={uid}", f"--regid={gid}", "--clear-groups"]
 
 
 def _client_exec(command: Sequence[str]) -> int:
@@ -314,6 +328,7 @@ class NetworkHarness:
             "--inh-caps=-all",
             "--ambient-caps=-all",
             "--no-new-privs",
+            *_setpriv_identity_args(),
             sys.executable,
             str(Path(__file__).resolve()),
             "--_serve-peer",
@@ -412,6 +427,7 @@ class NetworkHarness:
             "--inh-caps=-all",
             "--ambient-caps=-all",
             "--no-new-privs",
+            *_setpriv_identity_args(),
             sys.executable,
             str(Path(__file__).resolve()),
             "--_client-exec",
@@ -637,6 +653,13 @@ def _cleanup_self_check():
 
 
 def _setup_failure_self_check():
+    with (
+        patch("os.geteuid", return_value=0),
+        patch(__name__ + "._has_capability", return_value=True),
+        patch.dict(os.environ, {"SUDO_UID": "1000", "SUDO_GID": "1001"}),
+        patch("os.stat", side_effect=[Mock(st_ino=1), Mock(st_ino=1)]),
+    ):
+        assert _setpriv_identity_args() == ["--reuid=1000", "--regid=1001", "--clear-groups"]
     harness = NetworkHarness()
     calls = []
 
