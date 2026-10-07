@@ -1,6 +1,7 @@
 import errno
 import socket
 import unittest
+from contextlib import ExitStack, contextmanager
 from unittest.mock import patch
 
 from freebind import _socket
@@ -18,7 +19,9 @@ class RecordingSocket:
         }.get(family, ("", 0))
         self.closed = False
         self.type = socket.SOCK_STREAM
+        self.proto = 0
         self.peer = None
+        self.timeouts = []
 
     def setsockopt(self, level, option, value):
         self.calls.append((level, option, value))
@@ -38,6 +41,10 @@ class RecordingSocket:
     def bind(self, address):
         self.operations.append(("bind", address))
         self.local = address
+
+    def settimeout(self, timeout):
+        self.operations.append(("settimeout", timeout))
+        self.timeouts.append(timeout)
 
     def close(self):
         self.closed = True
@@ -268,6 +275,134 @@ class NewSocketTests(unittest.TestCase):
 
         self.assertTrue(sock.closed)
         self.assertNotIn("bind", [operation[0] for operation in sock.operations])
+
+
+@contextmanager
+def fake_network(addresses, *, connect_errors=None, times=None, dns_error=None):
+    created = []
+    connect_errors = connect_errors or {}
+
+    def make_socket(family, socktype, proto):
+        sock = RecordingSocket(family)
+        sock.type = socktype
+        sock.proto = proto
+        created.append(sock)
+        return sock
+
+    def bind(sock, address):
+        sock.bind(address)
+
+    def connect(sock, address):
+        sock.operations.append(("connect", address))
+        if address in connect_errors:
+            raise connect_errors[address]
+
+    with ExitStack() as stack:
+        stack.enter_context(
+            patch.object(socket, "getaddrinfo", side_effect=dns_error, return_value=addresses)
+        )
+        stack.enter_context(patch.object(_socket, "_create_unpatched_socket", side_effect=make_socket))
+        stack.enter_context(patch.object(_socket, "_ORIGINAL_BIND", side_effect=bind))
+        stack.enter_context(patch.object(_socket, "_ORIGINAL_CONNECT", side_effect=connect))
+        if times is not None:
+            stack.enter_context(patch.object(_socket.time, "monotonic", side_effect=times))
+        yield created
+
+
+class CreateConnectionTests(unittest.TestCase):
+    def info(self, family, host):
+        sockaddr = (host, 443) if family == socket.AF_INET else (host, 443, 0, 0)
+        return family, socket.SOCK_STREAM, socket.IPPROTO_TCP, "", sockaddr
+
+    def test_options_binding_connect_order_and_timeout_restoration(self):
+        info = self.info(socket.AF_INET, "198.51.100.1")
+        source = _socket.Source("192.0.2.8", interface="eth0")
+        options = ((socket.SOL_SOCKET, socket.SO_REUSEADDR, 1),)
+        with fake_network([info], times=[0.0, 1.0, 2.0]) as sockets:
+            result = _socket.create_connection(
+                ("example.test", 443), source, timeout=10.0, socket_options=options
+            )
+
+        self.assertIs(result, sockets[0])
+        self.assertEqual(
+            sockets[0].calls,
+            [
+                options[0],
+                (socket.SOL_SOCKET, getattr(socket, "SO_BINDTODEVICE", 25), b"eth0"),
+                (socket.IPPROTO_IP, getattr(socket, "IP_FREEBIND", 15), 1),
+            ],
+        )
+        self.assertEqual(
+            [op[0] for op in sockets[0].operations if op[0] in ("bind", "connect")],
+            ["bind", "connect"],
+        )
+        self.assertEqual(sockets[0].timeouts, [9.0, 8.0, 10.0])
+
+    def test_matching_families_are_tried_without_unconfigured_fallback(self):
+        ipv4 = self.info(socket.AF_INET, "198.51.100.1")
+        ipv6 = self.info(socket.AF_INET6, "2001:db8::1")
+        error = OSError(errno.ECONNREFUSED, "refused")
+        with fake_network([ipv4, ipv6], connect_errors={ipv6[4]: error}) as sockets:
+            with self.assertRaises(OSError) as raised:
+                _socket.create_connection(("example.test", 443), _socket.Source("2001:db8::8"))
+
+        self.assertIs(raised.exception, error)
+        self.assertEqual([sock.family for sock in sockets], [socket.AF_INET6])
+        self.assertTrue(sockets[0].closed)
+
+    def test_strict_family_mismatch_fails_before_socket_creation(self):
+        with fake_network([self.info(socket.AF_INET, "198.51.100.1")]) as sockets:
+            with self.assertRaises(_socket.FamilyMismatchError):
+                _socket.create_connection(("example.test", 443), _socket.Source("2001:db8::8"))
+        self.assertEqual(sockets, [])
+
+    def test_non_strict_family_miss_uses_wildcard_bind(self):
+        info = self.info(socket.AF_INET6, "2001:db8::1")
+        source = _socket.Source("192.0.2.8", strict=False, interface="eth0")
+        with fake_network([info]) as sockets:
+            result = _socket.create_connection(("example.test", 443), source)
+
+        self.assertIs(result, sockets[0])
+        self.assertEqual(sockets[0].local, ("::", 0, 0, 0))
+        self.assertEqual(
+            sockets[0].calls,
+            [(socket.SOL_SOCKET, getattr(socket, "SO_BINDTODEVICE", 25), b"eth0")],
+        )
+        self.assertTrue(_socket._is_explicit_socket(sockets[0]))
+
+    def test_timeout_budget_spans_candidates_and_failed_socket_closes(self):
+        first = self.info(socket.AF_INET, "198.51.100.1")
+        second = self.info(socket.AF_INET, "198.51.100.2")
+        error = socket.timeout("candidate timed out")
+        with fake_network(
+            [first, second],
+            connect_errors={first[4]: error},
+            times=[0.0, 0.5, 1.0, 2.0, 2.5, 3.0],
+        ) as sockets:
+            result = _socket.create_connection(
+                ("example.test", 443), _socket.Source("192.0.2.8"), timeout=10.0
+            )
+
+        self.assertIs(result, sockets[1])
+        self.assertTrue(sockets[0].closed)
+        self.assertEqual(sockets[1].timeouts, [7.5, 7.0, 10.0])
+
+    def test_dns_failure_and_elapsed_dns_timeout_propagate(self):
+        error = socket.gaierror(socket.EAI_AGAIN, "temporary failure")
+        with fake_network([], dns_error=error) as sockets:
+            with self.assertRaises(socket.gaierror) as raised:
+                _socket.create_connection(("example.test", 443), _socket.Source("192.0.2.8"))
+        self.assertIs(raised.exception, error)
+        self.assertEqual(sockets, [])
+
+        with fake_network(
+            [self.info(socket.AF_INET, "198.51.100.1")], times=[0.0, 2.0]
+        ) as sockets:
+            with self.assertRaises(socket.timeout):
+                _socket.create_connection(
+                    ("example.test", 443), _socket.Source("192.0.2.8"), timeout=1.0
+                )
+        self.assertEqual(sockets, [])
 
 
 if __name__ == "__main__":

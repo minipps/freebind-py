@@ -4,9 +4,10 @@ import errno
 import os
 import socket
 import sys
+import time
 import weakref
 
-from ._source import Source
+from ._source import FamilyMismatchError, Source
 
 
 # Keep descriptors captured before the process-wide patch can replace them.
@@ -99,6 +100,13 @@ def _is_explicit_socket(sock: socket.socket) -> bool:
     return sock in _EXPLICIT_SOCKETS
 
 
+def _close_failed_socket(sock: socket.socket) -> None:
+    try:
+        sock.close()
+    except OSError:
+        pass
+
+
 def bind_socket(sock: socket.socket, source: Source, *, port: int = 0) -> str | None:
     """Bind an unbound caller-owned socket using ``source``."""
     if not sys.platform.startswith("linux"):
@@ -144,11 +152,11 @@ def _socket_type(type: int) -> int:
     return type
 
 
-def _create_unpatched_socket(family: int, type: int) -> socket.socket:
+def _create_unpatched_socket(family: int, type: int, proto: int = 0) -> socket.socket:
     """Construct a socket without invoking a patched ``socket.__init__``."""
     sock = _ORIGINAL_NEW(_ORIGINAL_SOCKET)
     try:
-        _ORIGINAL_INIT(sock, family, type, 0)
+        _ORIGINAL_INIT(sock, family, type, proto)
     except BaseException:
         try:
             sock.close()
@@ -156,6 +164,81 @@ def _create_unpatched_socket(family: int, type: int) -> socket.socket:
             pass
         raise
     return sock
+
+
+def _matching_addrinfo(addresses: list[tuple], source: Source) -> list[tuple]:
+    matching = [info for info in addresses if info[0] in source.families]
+    if matching:
+        return matching
+    if source.strict:
+        raise FamilyMismatchError()
+    return list(addresses)
+
+
+def _remaining_timeout(deadline: float | None, timeout: float | None) -> float | None:
+    if deadline is None:
+        return timeout
+    remaining = deadline - time.monotonic()
+    if remaining <= 0:
+        raise socket.timeout("timed out")
+    return remaining
+
+
+def create_connection(
+    address: tuple,
+    source: Source,
+    *,
+    timeout: float | None = None,
+    socket_options: tuple = (),
+) -> socket.socket:
+    """Resolve and connect a TCP socket using ``source``."""
+    if not sys.platform.startswith("linux"):
+        raise NotImplementedError("Freebind is only supported on Linux")
+    if not isinstance(source, Source):
+        raise TypeError("source must be a Source")
+    host, port = address[:2]
+    options = tuple(socket_options)
+    if timeout is not None and timeout < 0:
+        raise ValueError("timeout must be nonnegative")
+    deadline = time.monotonic() + timeout if timeout is not None and timeout > 0 else None
+
+    addresses = socket.getaddrinfo(
+        host,
+        port,
+        family=socket.AF_UNSPEC,
+        type=socket.SOCK_STREAM,
+    )
+    if not addresses:
+        raise socket.gaierror(socket.EAI_NONAME, "No addresses found")
+    candidates = _matching_addrinfo(addresses, source)
+    last_error = None
+    # ponytail: sequential candidates can add tail latency; add Happy Eyeballs if that matters.
+    for family, socktype, proto, _, sockaddr in candidates:
+        remaining = _remaining_timeout(deadline, timeout)
+        sock = None
+        try:
+            sock = _create_unpatched_socket(family, socktype, proto)
+            sock.settimeout(remaining)
+            for option in options:
+                sock.setsockopt(*option)
+            bind_socket(sock, source)
+            sock.settimeout(_remaining_timeout(deadline, timeout))
+            _ORIGINAL_CONNECT(sock, sockaddr)
+            sock.settimeout(timeout)
+            return sock
+        except OSError as exc:
+            if sock is not None:
+                _close_failed_socket(sock)
+            last_error = exc
+            _remaining_timeout(deadline, timeout)
+        except BaseException:
+            if sock is not None:
+                _close_failed_socket(sock)
+            raise
+
+    if last_error is not None:
+        raise last_error
+    raise socket.gaierror(socket.EAI_NONAME, "No usable addresses found")
 
 
 def new_socket(
