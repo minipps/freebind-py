@@ -19,8 +19,8 @@ with success. Owners remain unassigned until actual dispatch.
 | T05 | Linux Freebind option setup | T02 | done | core | Reviewed; full deterministic suite 19 tests passed |
 | T06 | Interface setup and bound socket factories | T04, T05 | done | core_options | 16 socket tests and live UDP/fallback binds passed; bypass hooks established |
 | T07 | Synchronous connection helper | T06 | done | core_options | Reviewed; 22 socket tests pass, shared timeout/family helpers |
-| T08 | Asyncio connection helper | T07 | in_progress | core_options | Reserved owning implementation/check paths |
-| T09 | UDP recipes and behavior checks | T06, T08 | pending | — | — |
+| T08 | Asyncio connection helper | T07 | done | core_options | Reviewed; 26 socket checks include async timeout/cancellation |
+| T09 | UDP recipes and behavior checks | T06, T08 | in_progress | udp | Reserved owning implementation/check paths |
 | T10 | Patch lifecycle and ownership | T04, T06 | done | patch | Lifecycle reviewed; six restoration/class-identity checks passed |
 | T11 | Outgoing-operation patch hooks | T10 | done | patch | Reviewed; 12 patch tests pass including UDP/SSL/errno bypass |
 | T12 | Socket-construction patch timing | T11 | in_progress | patch | Constructor hook reservation |
@@ -28,8 +28,8 @@ with success. Owners remain unassigned until actual dispatch.
 | T14 | Requests HTTP/HTTPS adapter | T07 | in_progress | requests | Reserved owning implementation/check paths |
 | T15 | Requests fresh connections | T14 | pending | — | — |
 | T16 | aiohttp connector | T06 | done | aiohttp | Eight checks pass on aiohttp 3.13.5/3.14.4; reviewed native seams |
-| T17 | HTTPX sync backend and transport | T07 | in_progress | httpx | Reserved owning implementation/check paths |
-| T18 | HTTPX asyncio backend and transport | T08, T17 | pending | — | — |
+| T17 | HTTPX sync backend and transport | T07 | done | httpx | d042e7b reviewed; five checks on both dependency environments |
+| T18 | HTTPX asyncio backend and transport | T08, T17 | in_progress | httpx | Reserved owning implementation/check paths |
 | T19 | HTTPX fresh connections | T18 | pending | — | — |
 | T20 | Cross-adapter failure and isolation checks | T13, T15, T16, T19 | pending | — | — |
 | T21 | Isolated namespace harness | T06 | in_progress | namespace | Reserved owning files; baseline T06 integrated |

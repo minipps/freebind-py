@@ -1,7 +1,8 @@
 import errno
+import asyncio
 import socket
 import unittest
-from contextlib import ExitStack, contextmanager
+from contextlib import ExitStack, asynccontextmanager, contextmanager
 from unittest.mock import patch
 
 from freebind import _socket
@@ -22,6 +23,7 @@ class RecordingSocket:
         self.proto = 0
         self.peer = None
         self.timeouts = []
+        self.blocking = True
 
     def setsockopt(self, level, option, value):
         self.calls.append((level, option, value))
@@ -45,6 +47,10 @@ class RecordingSocket:
     def settimeout(self, timeout):
         self.operations.append(("settimeout", timeout))
         self.timeouts.append(timeout)
+
+    def setblocking(self, blocking):
+        self.operations.append(("setblocking", blocking))
+        self.blocking = blocking
 
     def close(self):
         self.closed = True
@@ -355,6 +361,163 @@ class CreateConnectionTests(unittest.TestCase):
             with self.assertRaises(_socket.FamilyMismatchError):
                 _socket.create_connection(("example.test", 443), _socket.Source("2001:db8::8"))
         self.assertEqual(sockets, [])
+
+
+@asynccontextmanager
+async def fake_async_network(addresses, *, connect=None, dns=None):
+    loop = asyncio.get_running_loop()
+    created = []
+
+    def make_socket(family, socktype, proto):
+        sock = RecordingSocket(family)
+        sock.type = socktype
+        sock.proto = proto
+        created.append(sock)
+        return sock
+
+    async def getaddrinfo(*args, **kwargs):
+        if dns is not None:
+            return await dns(*args, **kwargs)
+        return addresses
+
+    async def sock_connect(sock, address):
+        sock.operations.append(("sock_connect", address))
+        if connect is not None:
+            await connect(sock, address)
+
+    with ExitStack() as stack:
+        stack.enter_context(patch.object(loop, "getaddrinfo", new=getaddrinfo))
+        stack.enter_context(patch.object(loop, "sock_connect", new=sock_connect))
+        stack.enter_context(patch.object(_socket, "_create_unpatched_socket", side_effect=make_socket))
+        stack.enter_context(
+            patch.object(_socket, "_ORIGINAL_BIND", side_effect=lambda sock, address: sock.bind(address))
+        )
+        yield created
+
+
+class AsyncCreateConnectionTests(unittest.IsolatedAsyncioTestCase):
+    def info(self, family, host):
+        sockaddr = (host, 443) if family == socket.AF_INET else (host, 443, 0, 0)
+        return family, socket.SOCK_STREAM, socket.IPPROTO_TCP, "", sockaddr
+
+    async def test_filters_families_and_returns_nonblocking_explicit_socket(self):
+        async def connect(sock, address):
+            return None
+
+        infos = [
+            self.info(socket.AF_INET, "198.51.100.1"),
+            self.info(socket.AF_INET6, "2001:db8::1"),
+        ]
+        source = _socket.Source("2001:db8::8", interface="eth0")
+        options = ((socket.SOL_SOCKET, socket.SO_REUSEADDR, 1),)
+        async with fake_async_network(infos, connect=connect) as sockets:
+            result = await _socket.async_create_connection(
+                ("example.test", 443), source, socket_options=options
+            )
+
+        self.assertIs(result, sockets[0])
+        self.assertEqual([sock.family for sock in sockets], [socket.AF_INET6])
+        self.assertFalse(result.blocking)
+        self.assertTrue(_socket._is_explicit_socket(result))
+        self.assertEqual(
+            result.calls,
+            [
+                options[0],
+                (socket.SOL_SOCKET, getattr(socket, "SO_BINDTODEVICE", 25), b"eth0"),
+                (socket.IPPROTO_IPV6, getattr(socket, "IPV6_FREEBIND", 78), 1),
+            ],
+        )
+        self.assertEqual(
+            [op[0] for op in result.operations if op[0] in ("bind", "sock_connect")],
+            ["bind", "sock_connect"],
+        )
+
+    async def test_async_dns_timeout_and_failure_propagate(self):
+        async def slow_dns(*args, **kwargs):
+            await asyncio.sleep(1)
+
+        async with fake_async_network([], dns=slow_dns) as sockets:
+            with self.assertRaises(TimeoutError):
+                await _socket.async_create_connection(
+                    ("example.test", 443), _socket.Source("192.0.2.8"), timeout=0.01
+                )
+        self.assertEqual(sockets, [])
+
+        error = socket.gaierror(socket.EAI_AGAIN, "temporary failure")
+
+        async def failed_dns(*args, **kwargs):
+            raise error
+
+        async with fake_async_network([], dns=failed_dns):
+            with self.assertRaises(socket.gaierror) as raised:
+                await _socket.async_create_connection(
+                    ("example.test", 443), _socket.Source("192.0.2.8")
+                )
+        self.assertIs(raised.exception, error)
+
+    async def test_connect_timeout_retries_candidate_within_one_budget(self):
+        infos = [
+            self.info(socket.AF_INET, "198.51.100.1"),
+            self.info(socket.AF_INET, "198.51.100.2"),
+        ]
+
+        async def connect(sock, address):
+            if address == infos[0][4]:
+                await asyncio.sleep(0)
+                raise socket.timeout("candidate timed out")
+
+        async with fake_async_network(infos, connect=connect) as sockets:
+            result = await _socket.async_create_connection(
+                ("example.test", 443), _socket.Source("192.0.2.8"), timeout=1.0
+            )
+
+        self.assertIs(result, sockets[1])
+        self.assertTrue(sockets[0].closed)
+        self.assertFalse(sockets[1].blocking)
+
+        async def slow_candidates(sock, address):
+            if address == infos[0][4]:
+                await asyncio.sleep(0.12)
+                raise socket.timeout("candidate timed out")
+            await asyncio.sleep(0.15)
+
+        async with fake_async_network(infos, connect=slow_candidates) as sockets:
+            with self.assertRaises(TimeoutError):
+                await _socket.async_create_connection(
+                    ("example.test", 443), _socket.Source("192.0.2.8"), timeout=0.2
+                )
+        self.assertEqual(len(sockets), 2)
+        self.assertTrue(all(sock.closed for sock in sockets))
+
+    async def test_connect_timeout_and_cancellation_close_owned_socket(self):
+        info = self.info(socket.AF_INET, "198.51.100.1")
+        started = asyncio.Event()
+
+        async def hang(sock, address):
+            started.set()
+            await asyncio.sleep(1)
+
+        async with fake_async_network([info], connect=hang) as sockets:
+            with self.assertRaises(TimeoutError):
+                await _socket.async_create_connection(
+                    ("example.test", 443), _socket.Source("192.0.2.8"), timeout=0.01
+                )
+        self.assertTrue(sockets[0].closed)
+
+        started.clear()
+        async with fake_async_network([info], connect=hang) as sockets:
+            task = asyncio.create_task(
+                _socket.async_create_connection(("example.test", 443), _socket.Source("192.0.2.8"))
+            )
+            await started.wait()
+            task.cancel()
+            with self.assertRaises(asyncio.CancelledError):
+                await task
+        self.assertTrue(task.done())
+        self.assertTrue(sockets[0].closed)
+        self.assertFalse(
+            [pending for pending in asyncio.all_tasks() if pending is not asyncio.current_task()]
+        )
 
     def test_non_strict_family_miss_uses_wildcard_bind(self):
         info = self.info(socket.AF_INET6, "2001:db8::1")

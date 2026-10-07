@@ -1,5 +1,6 @@
 """Low-level socket helpers."""
 
+import asyncio
 import errno
 import os
 import socket
@@ -239,6 +240,60 @@ def create_connection(
     if last_error is not None:
         raise last_error
     raise socket.gaierror(socket.EAI_NONAME, "No usable addresses found")
+
+
+async def async_create_connection(
+    address: tuple,
+    source: Source,
+    *,
+    timeout: float | None = None,
+    socket_options: tuple = (),
+) -> socket.socket:
+    """Resolve and connect a nonblocking TCP socket using ``source``."""
+    if not sys.platform.startswith("linux"):
+        raise NotImplementedError("Freebind is only supported on Linux")
+    if not isinstance(source, Source):
+        raise TypeError("source must be a Source")
+    host, port = address[:2]
+    options = tuple(socket_options)
+    if timeout is not None and timeout < 0:
+        raise ValueError("timeout must be nonnegative")
+
+    loop = asyncio.get_running_loop()
+    async with asyncio.timeout(timeout):
+        addresses = await loop.getaddrinfo(
+            host,
+            port,
+            family=socket.AF_UNSPEC,
+            type=socket.SOCK_STREAM,
+        )
+        if not addresses:
+            raise socket.gaierror(socket.EAI_NONAME, "No addresses found")
+        candidates = _matching_addrinfo(addresses, source)
+        last_error = None
+        # ponytail: sequential candidates can add tail latency; add Happy Eyeballs if that matters.
+        for family, socktype, proto, _, sockaddr in candidates:
+            sock = None
+            try:
+                sock = _create_unpatched_socket(family, socktype, proto)
+                sock.setblocking(False)
+                for option in options:
+                    sock.setsockopt(*option)
+                bind_socket(sock, source)
+                await loop.sock_connect(sock, sockaddr)
+                return sock
+            except OSError as exc:
+                if sock is not None:
+                    _close_failed_socket(sock)
+                last_error = exc
+            except BaseException:
+                if sock is not None:
+                    _close_failed_socket(sock)
+                raise
+
+        if last_error is not None:
+            raise last_error
+        raise socket.gaierror(socket.EAI_NONAME, "No usable addresses found")
 
 
 def new_socket(
