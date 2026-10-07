@@ -20,7 +20,7 @@ with success. Owners remain unassigned until actual dispatch.
 | T06 | Interface setup and bound socket factories | T04, T05 | done | core_options | 16 socket tests and live UDP/fallback binds passed; bypass hooks established |
 | T07 | Synchronous connection helper | T06 | done | core_options | Reviewed; 22 socket tests pass, shared timeout/family helpers |
 | T08 | Asyncio connection helper | T07 | done | core_options | Reviewed; 26 socket checks include async timeout/cancellation |
-| T09 | UDP recipes and behavior checks | T06, T08 | in_progress | udp | Reserved owning implementation/check paths |
+| T09 | UDP recipes and behavior checks | T06, T08 | done | udp | Reviewed; four live loopback UDP checks and four recipe modes pass |
 | T10 | Patch lifecycle and ownership | T04, T06 | done | patch | Lifecycle reviewed; six restoration/class-identity checks passed |
 | T11 | Outgoing-operation patch hooks | T10 | done | patch | Reviewed; 12 patch tests pass including UDP/SSL/errno bypass |
 | T12 | Socket-construction patch timing | T11 | done | patch | Reviewed; 16 patch checks include adopted/accepted/duplicated descriptors |
