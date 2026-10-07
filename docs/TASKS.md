@@ -21,8 +21,8 @@ with success. Owners remain unassigned until actual dispatch.
 | T07 | Synchronous connection helper | T06 | in_progress | core_options | Reserved owning files; baseline T06 integrated |
 | T08 | Asyncio connection helper | T07 | pending | — | — |
 | T09 | UDP recipes and behavior checks | T06, T08 | pending | — | — |
-| T10 | Patch lifecycle and ownership | T04, T06 | in_progress | patch | Reserved owning files; baseline T06 integrated |
-| T11 | Outgoing-operation patch hooks | T10 | pending | — | — |
+| T10 | Patch lifecycle and ownership | T04, T06 | done | patch | Lifecycle reviewed; six restoration/class-identity checks passed |
+| T11 | Outgoing-operation patch hooks | T10 | in_progress | patch | Outgoing hook reservation; T10 reviewed |
 | T12 | Socket-construction patch timing | T11 | pending | — | — |
 | T13 | Explicit environment helper | T12 | pending | — | — |
 | T14 | Requests HTTP/HTTPS adapter | T07 | pending | — | — |
