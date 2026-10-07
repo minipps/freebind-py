@@ -34,13 +34,31 @@ with success. Owners remain unassigned until actual dispatch.
 | T20 | Cross-adapter failure and isolation checks | T13, T15, T16, T19 | done | contract_resume | Reviewed; four cross-area checks and 100 full checks pass on min/newest |
 | T21 | Isolated namespace harness | T06 | done | namespace | Reviewed; real v4/v6 smoke, zero client capabilities and failure cleanup pass |
 | T22 | End-to-end parity suite | T09, T12, T20, T21 | done | network_parity | Reviewed; eight real namespace checks pass on min/newest, zero skips/capabilities |
-| T23 | Compatibility CI and usage documentation | T22 | in_progress | ci_examples + usage_docs | CI/examples and documentation reservations assigned separately |
-| T24 | Build and smoke-test release artifacts | T23 | pending | — | — |
+| T23 | Compatibility CI and usage documentation | T22 | done | ci_examples + usage_docs | Reviewed; hosted run 37684168659 passes all 11 jobs, both namespace jobs run eight tests with zero skips/capabilities; examples pass real HTTPS/TCP |
+| T24 | Build and smoke-test release artifacts | T23 | in_progress | artifacts | Hosted integration gate passed; wheel/sdist and clean independent installations under review |
 
-## Stable checkpoint — 2026-10-07
+## Current validation — 2026-10-07
+
+T01–T23 are implemented, reviewed, committed, and pushed.
+[Hosted CI run 37684168659](https://github.com/minipps/freebind-py/actions/runs/37684168659)
+passes all 11 jobs: CPython 3.11–3.14 with minimum/newest clients, ARM64
+unit/example smoke, and both real namespace suites. Each namespace job ran
+eight checks without skips; clients ran as UID/EUID 1001 with all five
+capability sets zero. Unit discovery runs 108 checks, including eight intentional
+namespace-only skips (100 executed checks). Locally, real namespace parity
+also passed on all four Python versions with newest clients and on 3.13 with
+minimum clients. Runnable client examples passed real HTTPS CA/SNI/source
+checks; the patch example passed its TCP source check.
+
+Hosted setup uses system Python 3.12 and sudo; the peer and clients drop to
+the invoking UID/GID and discard all capabilities. This avoids runner-owned
+checkout permission failures after dropping root capabilities.
+
+## Historical stable checkpoint — 2026-10-07
 
 Historical checkpoint: work paused at the user's request for poweroff.
-Work has now resumed; the task ledger above is current. T01–T19 and T21 are
+The notes below describe that pause; the ledger and current validation above
+supersede their remaining-work statements. At that point, T01–T19 and T21 were
 implemented, reviewed, and committed. No worker retains a file reservation.
 T21 is committed as `df59fa2`; the following documentation checkpoint records
 this handoff. T20 and T22–T24 remain unfinished; no release artifacts have been

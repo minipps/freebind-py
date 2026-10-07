@@ -98,9 +98,10 @@ Sources: [upstream setup and packet-rewriting distinction](https://github.com/bl
 
 Read-only arithmetic probes passed partial randomization, non-byte-aligned
 prefixes, singleton networks, and IPv6 `/0`. Ordinary socket construction
-returned `EPERM` in the research environment; no successful kernel bind or
-end-to-end network test has been demonstrated. Namespace integration tests are
-required acceptance gates, not previously completed work.
+returned `EPERM` in the original read-only research environment. Subsequent
+implementation validation outside that sandbox passed real IPv4/IPv6 namespace
+parity locally and in hosted CI with all client capabilities dropped. Current
+acceptance evidence is recorded in [TASKS.md](TASKS.md).
 
 ## 3. Public API and behavior contract
 

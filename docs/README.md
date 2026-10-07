@@ -1,9 +1,9 @@
 # Freebind Python implementation documents
 
 Start with [PLAN.md](PLAN.md), then choose work from [TASKS.md](TASKS.md). These
-documents preserve the research and decisions agreed on 2026-10-07. T01–T21 are implemented and committed. Work has resumed from the stable
-checkpoint; current assignments and evidence are in [TASKS.md](TASKS.md).
-T22–T24 remain unfinished.
+documents preserve the research and decisions agreed on 2026-10-07. T01–T23
+are implemented, reviewed, committed, and pushed. T24 artifact validation is
+in progress; current assignments and evidence are in [TASKS.md](TASKS.md).
 
 ## Document responsibilities
 
@@ -69,6 +69,7 @@ meaningful runnable check.
 
 The read-only sandbox rejects ordinary socket construction with `EPERM`.
 Outside that sandbox, the isolated namespace harness passed real IPv4/IPv6
-source and return-traffic checks. The full T22 parity suite is still pending.
+source and return-traffic checks. The full T22 parity suite also passed locally and in hosted CI with no skips
+and all client capabilities dropped.
 Do not infer that Freebind itself requires elevated privileges from the sandbox
 result.
