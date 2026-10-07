@@ -1,6 +1,8 @@
 import asyncio
 import socket
+import threading
 import unittest
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from unittest.mock import AsyncMock, patch
 
 import httpcore
@@ -66,8 +68,12 @@ class SyncTransportTests(unittest.TestCase):
         self.transport.close()
 
     def test_injects_backend_before_requests_and_keeps_native_streaming(self):
-        self.assertIs(self.transport._pool._network_backend, self.transport._freebind_backend)
-        self.assertIsInstance(self.transport._pool._network_backend, httpcore.SyncBackend)
+        self.assertIs(
+            self.transport._pool._network_backend, self.transport._freebind_backend
+        )
+        self.assertIsInstance(
+            self.transport._pool._network_backend, httpcore.SyncBackend
+        )
         core_response = httpcore.Response(
             200,
             headers=[(b"content-length", b"5")],
@@ -317,6 +323,186 @@ class AsyncTransportTests(unittest.IsolatedAsyncioTestCase):
         ):
             with self.subTest(options=options), self.assertRaises(ValueError):
                 AsyncFreebindTransport(source, **options)
+
+
+class CountingHTTPServer(ThreadingHTTPServer):
+    daemon_threads = True
+
+    def __init__(self, address, handler):
+        self.accepted = 0
+        super().__init__(address, handler)
+
+    def get_request(self):
+        request, address = super().get_request()
+        self.accepted += 1
+        return request, address
+
+
+class HTTPHandler(BaseHTTPRequestHandler):
+    protocol_version = "HTTP/1.1"
+
+    def do_GET(self):
+        if self.path == "/redirect":
+            status, body = 302, b""
+        else:
+            status, body = 200, b"ok"
+        self.send_response(status)
+        if status == 302:
+            self.send_header("Location", "/ok")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def log_message(self, _format, *args):
+        pass
+
+
+class FreshConnectionTests(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        self.server = CountingHTTPServer(("127.0.0.1", 0), HTTPHandler)
+        self.server_thread = threading.Thread(
+            target=self.server.serve_forever, daemon=True
+        )
+        self.server_thread.start()
+        self.url = f"http://127.0.0.1:{self.server.server_port}"
+
+    async def asyncTearDown(self):
+        await asyncio.to_thread(self.server.shutdown)
+        self.server.server_close()
+        self.server_thread.join()
+
+    def test_sync_fresh_reconnects_and_default_pooling_is_preserved(self):
+        source = Source("127.0.0.1")
+        with httpx.Client(transport=FreebindTransport(source)) as client:
+            client.get(self.url + "/one")
+            client.get(self.url + "/two")
+        self.assertEqual(self.server.accepted, 1)
+
+        limits = httpx.Limits(
+            max_connections=4,
+            max_keepalive_connections=3,
+            keepalive_expiry=17,
+        )
+        transport = FreebindTransport(
+            source, fresh=True, limits=limits, retries=1
+        )
+        self.assertEqual(transport._pool._max_connections, 4)
+        self.assertEqual(transport._pool._max_keepalive_connections, 0)
+        self.assertEqual(transport._pool._keepalive_expiry, 17)
+        with httpx.Client(transport=transport, follow_redirects=True) as client:
+            first = client.send(
+                client.build_request("GET", self.url + "/active"), stream=True
+            )
+            self.assertEqual(client.get(self.url + "/second").content, b"ok")
+            self.assertEqual(first.read(), b"ok")
+            first.close()
+            self.assertEqual(self.server.accepted, 3)
+
+            client.get(self.url + "/one")
+            client.get(self.url + "/two")
+            self.assertEqual(self.server.accepted, 5)
+            client.get(self.url + "/redirect")
+            self.assertEqual(self.server.accepted, 7)
+
+            backend = transport._freebind_backend
+            original_connect = backend.connect_tcp
+            attempts = []
+
+            def fail_once(*args, **kwargs):
+                attempts.append(None)
+                if len(attempts) == 1:
+                    raise httpcore.ConnectError("retry")
+                return original_connect(*args, **kwargs)
+
+            with (
+                patch.object(backend, "connect_tcp", side_effect=fail_once),
+                patch.object(backend, "sleep", return_value=None),
+            ):
+                self.assertEqual(client.get(self.url + "/retry").content, b"ok")
+            self.assertEqual(len(attempts), 2)
+            self.assertEqual(self.server.accepted, 8)
+
+    async def test_async_fresh_reconnects_and_default_pooling_is_preserved(self):
+        source = Source("127.0.0.1")
+        async with httpx.AsyncClient(
+            transport=AsyncFreebindTransport(source)
+        ) as client:
+            await client.get(self.url + "/one")
+            await client.get(self.url + "/two")
+        self.assertEqual(self.server.accepted, 1)
+
+        limits = httpx.Limits(
+            max_connections=4,
+            max_keepalive_connections=3,
+            keepalive_expiry=17,
+        )
+        transport = AsyncFreebindTransport(
+            source, fresh=True, limits=limits, retries=1
+        )
+        self.assertEqual(transport._pool._max_connections, 4)
+        self.assertEqual(transport._pool._max_keepalive_connections, 0)
+        self.assertEqual(transport._pool._keepalive_expiry, 17)
+        async with httpx.AsyncClient(
+            transport=transport, follow_redirects=True
+        ) as client:
+            first = await client.send(
+                client.build_request("GET", self.url + "/active"), stream=True
+            )
+            self.assertEqual((await client.get(self.url + "/second")).content, b"ok")
+            self.assertEqual(await first.aread(), b"ok")
+            await first.aclose()
+            self.assertEqual(self.server.accepted, 3)
+
+            await client.get(self.url + "/one")
+            await client.get(self.url + "/two")
+            self.assertEqual(self.server.accepted, 5)
+            await client.get(self.url + "/redirect")
+            self.assertEqual(self.server.accepted, 7)
+
+            backend = transport._freebind_backend
+            original_connect = backend.connect_tcp
+            attempts = []
+
+            async def fail_once(*args, **kwargs):
+                attempts.append(None)
+                if len(attempts) == 1:
+                    raise httpcore.ConnectError("retry")
+                return await original_connect(*args, **kwargs)
+
+            with (
+                patch.object(backend, "connect_tcp", side_effect=fail_once),
+                patch.object(backend, "sleep", new=AsyncMock(return_value=None)),
+            ):
+                self.assertEqual((await client.get(self.url + "/retry")).content, b"ok")
+            self.assertEqual(len(attempts), 2)
+            self.assertEqual(self.server.accepted, 8)
+
+    async def test_fresh_rejects_http2_or_missing_http1_for_both_transports(self):
+        source = Source("192.0.2.1")
+        for transport in (FreebindTransport, AsyncFreebindTransport):
+            with self.subTest(transport=transport, http2=True), self.assertRaisesRegex(
+                ValueError, "HTTP/2"
+            ):
+                transport(source, fresh=True, http2=True)
+            with self.subTest(transport=transport, http1=False), self.assertRaisesRegex(
+                ValueError, "HTTP/1.1"
+            ):
+                transport(source, fresh=True, http1=False)
+
+            pooled = transport(source, http2=True)
+            self.assertTrue(pooled._pool._http2)
+            if isinstance(pooled, AsyncFreebindTransport):
+                await pooled.aclose()
+            else:
+                pooled.close()
+
+            fresh = transport(source, fresh=True)
+            self.assertEqual(fresh._pool._max_connections, 100)
+            self.assertEqual(fresh._pool._max_keepalive_connections, 0)
+            if isinstance(fresh, AsyncFreebindTransport):
+                await fresh.aclose()
+            else:
+                fresh.close()
 
 
 if __name__ == "__main__":

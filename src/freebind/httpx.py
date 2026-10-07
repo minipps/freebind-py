@@ -13,11 +13,15 @@ from httpcore._backends.sync import SyncStream as _SyncStream
 from httpx import AsyncHTTPTransport as _AsyncHTTPTransport
 from httpx import HTTPTransport as _HTTPTransport
 
-from ._socket import async_create_connection, create_connection, _close_failed_socket
+from ._socket import (
+    _close_failed_socket,
+    async_create_connection,
+    create_connection,
+)
 from ._source import Source
 
 
-def _install_network_backend(pool: Any, backend: Any) -> None:
+def _install_network_backend(pool: Any, backend: Any, *, fresh: bool = False) -> None:
     """Replace HTTPcore's pool backend before its first request."""
     try:
         current = pool._network_backend
@@ -26,6 +30,17 @@ def _install_network_backend(pool: Any, backend: Any) -> None:
     if not callable(getattr(current, "connect_tcp", None)):
         raise RuntimeError("Unsupported HTTPcore network backend interface")
     pool._network_backend = backend
+    if fresh:
+        if not hasattr(pool, "_max_keepalive_connections"):
+            raise RuntimeError("Unsupported HTTPcore keepalive limit interface")
+        pool._max_keepalive_connections = 0
+
+
+def _validate_fresh(kwargs: dict[str, Any]) -> None:
+    if kwargs.get("http2", False):
+        raise ValueError("fresh connections do not support HTTP/2")
+    if not kwargs.get("http1", True):
+        raise ValueError("fresh connections require HTTP/1.1")
 
 
 class _SyncFreebindBackend(httpcore.SyncBackend):
@@ -78,13 +93,14 @@ class FreebindTransport(_HTTPTransport):
             raise ValueError("uds conflicts with the Freebind TCP source")
         if kwargs.get("local_address") is not None:
             raise ValueError("local_address conflicts with the Freebind source")
+        if fresh:
+            _validate_fresh(kwargs)
 
         super().__init__(**kwargs)
         self._freebind_source = source
         self.fresh = fresh
         self._freebind_backend = _SyncFreebindBackend(source)
-        _install_network_backend(self._pool, self._freebind_backend)
-
+        _install_network_backend(self._pool, self._freebind_backend, fresh=fresh)
 
 
 class _AsyncFreebindBackend(httpcore.AnyIOBackend):
@@ -153,9 +169,11 @@ class AsyncFreebindTransport(_AsyncHTTPTransport):
             raise ValueError("uds conflicts with the Freebind TCP source")
         if kwargs.get("local_address") is not None:
             raise ValueError("local_address conflicts with the Freebind source")
+        if fresh:
+            _validate_fresh(kwargs)
 
         super().__init__(**kwargs)
         self._freebind_source = source
         self.fresh = fresh
         self._freebind_backend = _AsyncFreebindBackend(source)
-        _install_network_backend(self._pool, self._freebind_backend)
+        _install_network_backend(self._pool, self._freebind_backend, fresh=fresh)

@@ -30,8 +30,8 @@ with success. Owners remain unassigned until actual dispatch.
 | T16 | aiohttp connector | T06 | done | aiohttp | Eight checks pass on aiohttp 3.13.5/3.14.4; reviewed native seams |
 | T17 | HTTPX sync backend and transport | T07 | done | httpx | d042e7b reviewed; five checks on both dependency environments |
 | T18 | HTTPX asyncio backend and transport | T08, T17 | done | httpx | Reviewed; 13 HTTPX checks pass with AnyIO 4.10/4.15 incl ownership |
-| T19 | HTTPX fresh connections | T18 | in_progress | httpx | Fresh transport reservation |
-| T20 | Cross-adapter failure and isolation checks | T13, T15, T16, T19 | pending | — | — |
+| T19 | HTTPX fresh connections | T18 | done | httpx | Reviewed; 16 sync/async checks on min/newest incl fresh streams/retries |
+| T20 | Cross-adapter failure and isolation checks | T13, T15, T16, T19 | in_progress | contract | Cross-area test reservation |
 | T21 | Isolated namespace harness | T06 | in_progress | namespace | Reserved owning files; baseline T06 integrated |
 | T22 | End-to-end parity suite | T09, T12, T20, T21 | pending | — | — |
 | T23 | Compatibility CI and usage documentation | T22 | pending | — | — |
