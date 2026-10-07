@@ -1,4 +1,5 @@
 import errno
+import os
 import socket
 import unittest
 from unittest import mock
@@ -423,6 +424,85 @@ class SocketEntrypointTests(unittest.TestCase):
         self.assertEqual(timeouts, [0.25])
         self.assertIsInstance(accepted, socket.socket)
         self.assertIsInstance(duplicate, DuplicateSocket)
+
+
+class PatchEnvironmentTests(unittest.TestCase):
+    def test_defaults_and_environment_values_are_applied_only_when_called(self):
+        with mock.patch.dict(os.environ, {"FREEBIND_RANDOM": "192.0.2.8"}, clear=True):
+            original = os.environ.copy()
+            handle = _patch.patch_from_env()
+            try:
+                self.assertEqual(handle.entrypoint, "socket")
+                self.assertEqual(
+                    handle.socket_types,
+                    frozenset((socket.SOCK_STREAM, socket.SOCK_DGRAM)),
+                )
+                self.assertEqual(handle.source.mode, "random")
+                self.assertIsNone(handle.source.bits)
+                self.assertTrue(handle.source.strict)
+                self.assertIsNone(handle.source.interface)
+                self.assertEqual(os.environ, original)
+            finally:
+                handle.restore()
+
+        environment = {
+            "FREEBIND_RANDOM": " 192.0.2.8, 2001:db8::8\n192.0.2.9 ",
+            "FREEBIND_TYPE_FILTER": "dGrAm",
+            "FREEBIND_ENTRYPOINT": "CoNnEcT",
+            "FREEBIND_IFACE": "lo",
+        }
+        with mock.patch.dict(os.environ, environment, clear=True):
+            original = os.environ.copy()
+            handle = _patch.patch_from_env()
+            try:
+                self.assertEqual(handle.entrypoint, "connect")
+                self.assertEqual(handle.socket_types, frozenset((socket.SOCK_DGRAM,)))
+                self.assertEqual(
+                    handle.source.families,
+                    frozenset((socket.AF_INET, socket.AF_INET6)),
+                )
+                self.assertEqual(handle.source.interface, "lo")
+                self.assertEqual(os.environ, original)
+            finally:
+                handle.restore()
+
+    def test_missing_or_empty_prefixes_fail_without_installing(self):
+        configurations = ({}, {"FREEBIND_RANDOM": ""}, {"FREEBIND_RANDOM": ", \t "})
+        for environment in configurations:
+            with self.subTest(environment=environment):
+                with mock.patch.dict(os.environ, environment, clear=True):
+                    with self.assertRaises(ValueError):
+                        _patch.patch_from_env()
+                self.assertIsNone(_patch._ACTIVE_PATCH)
+
+    def test_malformed_prefix_tokens_fail_without_installing(self):
+        for prefixes in ("192.0.2.8,not-a-prefix", "192.0.2.8/99"):
+            with self.subTest(prefixes=prefixes):
+                with mock.patch.dict(
+                    os.environ,
+                    {"FREEBIND_RANDOM": prefixes},
+                    clear=True,
+                ):
+                    with self.assertRaises(ValueError):
+                        _patch.patch_from_env()
+                self.assertIsNone(_patch._ACTIVE_PATCH)
+
+    def test_invalid_filter_entrypoint_and_interface_fail_before_install(self):
+        invalid = (
+            ({"FREEBIND_TYPE_FILTER": ""}, "FREEBIND_TYPE_FILTER"),
+            ({"FREEBIND_TYPE_FILTER": "STREAM,DGRAM"}, "FREEBIND_TYPE_FILTER"),
+            ({"FREEBIND_ENTRYPOINT": "listen"}, "FREEBIND_ENTRYPOINT"),
+            ({"FREEBIND_ENTRYPOINT": ""}, "FREEBIND_ENTRYPOINT"),
+            ({"FREEBIND_IFACE": ""}, "FREEBIND_IFACE"),
+            ({"FREEBIND_IFACE": "x" * getattr(socket, "IFNAMSIZ", 16)}, "FREEBIND_IFACE"),
+        )
+        for values, name in invalid:
+            with self.subTest(values=values):
+                environment = {"FREEBIND_RANDOM": "192.0.2.8", **values}
+                with mock.patch.dict(os.environ, environment, clear=True):
+                    with self.assertRaises((TypeError, ValueError)):
+                        _patch.patch_from_env()
+                self.assertIsNone(_patch._ACTIVE_PATCH)
 
 
 if __name__ == "__main__":

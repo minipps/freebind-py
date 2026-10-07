@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import errno
 import functools
+import os
 import socket
 import threading
 from typing import Callable
@@ -191,3 +192,34 @@ def patch(
             raise
         _ACTIVE_PATCH = handle
     return handle
+
+
+def patch_from_env() -> PatchHandle:
+    """Install a patch using the documented ``FREEBIND_*`` variables."""
+    raw_prefixes = os.environ.get("FREEBIND_RANDOM")
+    if raw_prefixes is None:
+        raise ValueError("FREEBIND_RANDOM must contain at least one prefix")
+    prefixes = raw_prefixes.replace(",", " ").split()
+    if not prefixes:
+        raise ValueError("FREEBIND_RANDOM must contain at least one prefix")
+
+    raw_filter = os.environ.get("FREEBIND_TYPE_FILTER")
+    if raw_filter is None:
+        socket_types = (socket.SOCK_STREAM, socket.SOCK_DGRAM)
+    else:
+        socket_types = {
+            "STREAM": (socket.SOCK_STREAM,),
+            "DGRAM": (socket.SOCK_DGRAM,),
+        }.get(raw_filter.strip().upper())
+        if socket_types is None:
+            raise ValueError("FREEBIND_TYPE_FILTER must be STREAM or DGRAM")
+
+    raw_entrypoint = os.environ.get("FREEBIND_ENTRYPOINT")
+    entrypoint = "socket" if raw_entrypoint is None else raw_entrypoint.strip().lower()
+    if entrypoint not in ("socket", "connect"):
+        raise ValueError("FREEBIND_ENTRYPOINT must be socket or connect")
+
+    interface = os.environ.get("FREEBIND_IFACE")
+    _socket._validate_interface(interface)
+    source = Source(prefixes, interface=interface)
+    return patch(source, entrypoint=entrypoint, socket_types=socket_types)
