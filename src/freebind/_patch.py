@@ -13,6 +13,7 @@ from ._source import Source
 
 
 _PATCHED_METHODS = {
+    "__init__": _socket._ORIGINAL_INIT,
     "connect": _socket._ORIGINAL_CONNECT,
     "connect_ex": _socket._ORIGINAL_CONNECT_EX,
     "sendto": _socket._ORIGINAL_SENDTO,
@@ -24,9 +25,16 @@ _PATCH_LOCK = threading.RLock()
 _MISSING = object()
 
 
-def _prepare(sock: socket.socket, handle: PatchHandle, *, udp_only: bool = False) -> None:
+def _prepare(
+    sock: socket.socket,
+    handle: PatchHandle,
+    *,
+    udp_only: bool = False,
+    construction: bool = False,
+) -> None:
+    entrypoint = "socket" if construction else "connect"
     with _PATCH_LOCK:
-        if _ACTIVE_PATCH is not handle or handle._restored or handle.entrypoint != "connect":
+        if _ACTIVE_PATCH is not handle or handle._restored or handle.entrypoint != entrypoint:
             return
     if sock.family not in (socket.AF_INET, socket.AF_INET6):
         return
@@ -43,7 +51,26 @@ def _prepare(sock: socket.socket, handle: PatchHandle, *, udp_only: bool = False
     _socket.bind_socket(sock, handle.source)
 
 
+def _hook_init(original: Callable, handle: PatchHandle) -> Callable:
+    @functools.wraps(original)
+    def method(sock, *args, **kwargs):
+        fileno = kwargs.get("fileno", args[3] if len(args) > 3 else None)
+        result = original(sock, *args, **kwargs)
+        if fileno is None and handle.entrypoint == "socket":
+            try:
+                _prepare(sock, handle, construction=True)
+            except BaseException:
+                _socket._close_failed_socket(sock)
+                raise
+        return result
+
+    return method
+
+
 def _hook(name: str, original: Callable, handle: PatchHandle) -> Callable:
+    if name == "__init__":
+        return _hook_init(original, handle)
+
     @functools.wraps(original)
     def method(sock, *args, **kwargs):
         try:
@@ -122,7 +149,10 @@ def patch(
     entrypoint: str = "connect",
     socket_types=(socket.SOCK_STREAM, socket.SOCK_DGRAM),
 ) -> PatchHandle:
-    """Install Freebind hooks on ``socket.socket`` until the handle is restored."""
+    """Install hooks on ``socket.socket`` until the handle is restored.
+
+    Socket timing binds during construction, so a later explicit bind can fail.
+    """
     global _ACTIVE_PATCH
     if not isinstance(source, Source):
         raise TypeError("source must be a Source")
@@ -134,12 +164,21 @@ def patch(
         if _ACTIVE_PATCH is not None:
             raise RuntimeError("a Freebind socket patch is already active")
         cls = handle._socket_class
+        methods = (
+            {"__init__": _PATCHED_METHODS["__init__"]}
+            if entrypoint == "socket"
+            else {
+                name: original
+                for name, original in _PATCHED_METHODS.items()
+                if name != "__init__"
+            }
+        )
         handle._previous = {
-            name: cls.__dict__.get(name, _MISSING) for name in _PATCHED_METHODS
+            name: cls.__dict__.get(name, _MISSING) for name in methods
         }
         handle._installed = {
             name: _hook(name, original, handle)
-            for name, original in _PATCHED_METHODS.items()
+            for name, original in methods.items()
         }
         installed = []
         try:

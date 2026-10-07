@@ -26,6 +26,8 @@ class PatchLifecycleTests(unittest.TestCase):
             self.assertIs(socket.socket, alias)
             self.assertIs(self.socket_class, alias)
             for name in _patch._PATCHED_METHODS:
+                if name == "__init__":
+                    continue
                 self.assertIsNot(getattr(alias, name), self.original[name])
         finally:
             handle.restore()
@@ -117,6 +119,7 @@ class _RecordingSocket:
             socket.AF_INET6: ("::", 0, 0, 0),
         }.get(family, ("", 0))
         self.peer = peer
+        self.closed = False
 
     def getpeername(self):
         if self.peer is None:
@@ -125,6 +128,9 @@ class _RecordingSocket:
 
     def getsockname(self):
         return self.local
+
+    def close(self):
+        self.closed = True
 
 
 class OutgoingPatchTests(unittest.TestCase):
@@ -277,6 +283,146 @@ class OutgoingPatchTests(unittest.TestCase):
         prepare.assert_called_once_with(target, handle, udp_only=False)
         connect.assert_called_once_with(target, ("198.51.100.9", 443))
         self.assertTrue(target._connected)
+
+
+class SocketEntrypointTests(unittest.TestCase):
+    def setUp(self):
+        self.source = Source("192.0.2.8")
+
+    def initialize(self, events):
+        def init(sock, family, type, proto, fileno=None):
+            events.append(("init", fileno))
+            if fileno is None:
+                sock.family = family
+                sock.type = type
+                sock.local = {
+                    socket.AF_INET: ("0.0.0.0", 0),
+                    socket.AF_INET6: ("::", 0, 0, 0),
+                }.get(family, ("", 0))
+
+        return init
+
+    def test_new_socket_binds_during_construction_and_later_bind_conflicts(self):
+        events = []
+        target = _RecordingSocket(socket.AF_INET, socket.SOCK_DGRAM)
+        socket_type = socket.SOCK_DGRAM | getattr(socket, "SOCK_NONBLOCK", 0)
+
+        def bind(sock, source, port=0):
+            events.append(("bind", source))
+            sock.local = ("192.0.2.8", 49152)
+            _patch._socket._mark_explicit_socket(sock)
+
+        with mock.patch.dict(
+            _patch._PATCHED_METHODS,
+            {"__init__": self.initialize(events)},
+        ):
+            with mock.patch.object(_patch._socket, "bind_socket", side_effect=bind):
+                with _patch.patch(
+                    self.source,
+                    entrypoint="socket",
+                    socket_types=(socket_type,),
+                ):
+                    socket.socket.__init__(target, socket.AF_INET, socket_type, 0)
+
+        self.assertEqual(events, [("init", None), ("bind", self.source)])
+        self.assertFalse(_patch._socket._is_unbound(target))
+        with self.assertRaises(OSError) as raised:
+            _patch._socket.bind_socket(target, Source("192.0.2.9"))
+        self.assertEqual(raised.exception.errno, errno.EINVAL)
+
+    def test_type_filter_uses_actual_type_and_creation_flags(self):
+        target = _RecordingSocket(socket.AF_INET, socket.SOCK_DGRAM)
+        socket_type = socket.SOCK_DGRAM | getattr(socket, "SOCK_CLOEXEC", 0)
+        initialize = self.initialize([])
+        with mock.patch.dict(_patch._PATCHED_METHODS, {"__init__": initialize}):
+            with mock.patch.object(_patch._socket, "bind_socket") as bind:
+                with _patch.patch(
+                    self.source,
+                    entrypoint="socket",
+                    socket_types=(socket.SOCK_STREAM,),
+                ):
+                    socket.socket.__init__(target, socket.AF_INET, socket_type, 0)
+        bind.assert_not_called()
+
+    def test_setup_failure_closes_fresh_socket(self):
+        target = _RecordingSocket(socket.AF_INET, socket.SOCK_STREAM)
+        error = OSError(errno.EPERM, "denied")
+        with mock.patch.dict(
+            _patch._PATCHED_METHODS,
+            {"__init__": self.initialize([])},
+        ):
+            with mock.patch.object(
+                _patch._socket, "bind_socket", side_effect=error
+            ):
+                with _patch.patch(self.source, entrypoint="socket"):
+                    with self.assertRaises(OSError) as raised:
+                        socket.socket.__init__(target, socket.AF_INET, socket.SOCK_STREAM, 0)
+        self.assertIs(raised.exception, error)
+        self.assertTrue(target.closed)
+
+    def test_adopted_accepted_and_duplicated_descriptors_are_skipped(self):
+        events = []
+        timeouts = []
+
+        class Listener:
+            family = socket.AF_INET
+            type = socket.SOCK_STREAM
+            proto = 0
+
+            def _accept(self):
+                return 77, ("198.51.100.4", 40000)
+
+            def gettimeout(self):
+                return None
+
+        class DuplicateSocket(socket.socket):
+            @property
+            def family(self):
+                return socket.AF_INET
+
+            @property
+            def type(self):
+                return socket.SOCK_STREAM
+
+            @property
+            def proto(self):
+                return 0
+
+            def fileno(self):
+                return 3
+
+            def gettimeout(self):
+                return 0.25
+
+            def settimeout(self, timeout):
+                timeouts.append(timeout)
+
+        duplicate_source = DuplicateSocket.__new__(DuplicateSocket)
+        with mock.patch.dict(
+            _patch._PATCHED_METHODS,
+            {"__init__": self.initialize(events)},
+        ):
+            with mock.patch.object(socket, "dup", return_value=88):
+                with mock.patch.object(_patch._socket, "bind_socket") as bind:
+                    with _patch.patch(self.source, entrypoint="socket"):
+                        accepted, _ = socket.socket.accept(Listener())
+                        duplicate = _patch._socket._ORIGINAL_SOCKET.dup(duplicate_source)
+                        adopted = _RecordingSocket(socket.AF_INET, socket.SOCK_STREAM)
+                        socket.socket.__init__(
+                            adopted, socket.AF_INET, socket.SOCK_STREAM, 0, 99
+                        )
+                        socket.socket.__init__(
+                            adopted,
+                            socket.AF_INET,
+                            socket.SOCK_STREAM,
+                            0,
+                            fileno=100,
+                        )
+        bind.assert_not_called()
+        self.assertEqual(events, [("init", 77), ("init", 88), ("init", 99), ("init", 100)])
+        self.assertEqual(timeouts, [0.25])
+        self.assertIsInstance(accepted, socket.socket)
+        self.assertIsInstance(duplicate, DuplicateSocket)
 
 
 if __name__ == "__main__":

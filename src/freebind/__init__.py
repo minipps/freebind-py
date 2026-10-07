@@ -1,6 +1,7 @@
 """Linux Freebind sockets with explicit source-address policies."""
 
+from ._patch import PatchHandle, patch
 from ._source import FamilyMismatchError, Source, random_ip
 from ._socket import async_create_connection, bind_socket, create_connection, enable_freebind, new_socket
 
-__all__ = ["FamilyMismatchError", "Source", "random_ip", "enable_freebind", "bind_socket", "new_socket", "create_connection", "async_create_connection"]
+__all__ = ["FamilyMismatchError", "Source", "random_ip", "enable_freebind", "bind_socket", "new_socket", "create_connection", "async_create_connection", "PatchHandle", "patch"]
