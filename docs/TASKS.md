@@ -27,7 +27,7 @@ with success. Owners remain unassigned until actual dispatch.
 | T13 | Explicit environment helper | T12 | pending | — | — |
 | T14 | Requests HTTP/HTTPS adapter | T07 | in_progress | requests | Reserved owning implementation/check paths |
 | T15 | Requests fresh connections | T14 | pending | — | — |
-| T16 | aiohttp connector | T06 | in_progress | aiohttp | Reserved owning files; baseline T06 integrated |
+| T16 | aiohttp connector | T06 | done | aiohttp | Eight checks pass on aiohttp 3.13.5/3.14.4; reviewed native seams |
 | T17 | HTTPX sync backend and transport | T07 | in_progress | httpx | Reserved owning implementation/check paths |
 | T18 | HTTPX asyncio backend and transport | T08, T17 | pending | — | — |
 | T19 | HTTPX fresh connections | T18 | pending | — | — |
