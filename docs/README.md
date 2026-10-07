@@ -1,8 +1,9 @@
 # Freebind Python implementation documents
 
 Start with [PLAN.md](PLAN.md), then choose work from [TASKS.md](TASKS.md). These
-documents preserve the research and decisions agreed on 2026-10-07. They describe
-future implementation; no library implementation has been completed.
+documents preserve the research and decisions agreed on 2026-10-07. T01–T19 and T21 are implemented and committed. Work is paused at a stable
+checkpoint; see the resume notes in [TASKS.md](TASKS.md). T20 and T22–T24
+remain unfinished.
 
 ## Document responsibilities
 
@@ -66,7 +67,8 @@ or publication workflow. Keep the core dependency-free; reuse the selected
 clients' streams, TLS, and pooling. Every nontrivial task includes its smallest
 meaningful runnable check.
 
-The research environment rejected ordinary socket construction with `EPERM`.
-Real network validation must run in an environment allowing the isolated
-namespace harness. Do not infer that Freebind itself requires elevated privileges
-from that sandbox result.
+The read-only sandbox rejects ordinary socket construction with `EPERM`.
+Outside that sandbox, the isolated namespace harness passed real IPv4/IPv6
+source and return-traffic checks. The full T22 parity suite is still pending.
+Do not infer that Freebind itself requires elevated privileges from the sandbox
+result.

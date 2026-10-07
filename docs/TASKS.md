@@ -31,11 +31,52 @@ with success. Owners remain unassigned until actual dispatch.
 | T17 | HTTPX sync backend and transport | T07 | done | httpx | d042e7b reviewed; five checks on both dependency environments |
 | T18 | HTTPX asyncio backend and transport | T08, T17 | done | httpx | Reviewed; 13 HTTPX checks pass with AnyIO 4.10/4.15 incl ownership |
 | T19 | HTTPX fresh connections | T18 | done | httpx | Reviewed; 16 sync/async checks on min/newest incl fresh streams/retries |
-| T20 | Cross-adapter failure and isolation checks | T13, T15, T16, T19 | in_progress | contract | Cross-area test reservation |
+| T20 | Cross-adapter failure and isolation checks | T13, T15, T16, T19 | pending | — | Paused before implementation; initial contract review only, no draft files |
 | T21 | Isolated namespace harness | T06 | done | namespace | Reviewed; real v4/v6 smoke, zero client capabilities and failure cleanup pass |
 | T22 | End-to-end parity suite | T09, T12, T20, T21 | pending | — | — |
 | T23 | Compatibility CI and usage documentation | T22 | pending | — | — |
 | T24 | Build and smoke-test release artifacts | T23 | pending | — | — |
+
+## Stable checkpoint — 2026-10-07
+
+Work paused at the user's request for poweroff. T01–T19 and T21 are
+implemented, reviewed, and committed. No worker retains a file reservation.
+T21 is committed as `df59fa2`; the following documentation checkpoint records
+this handoff. T20 and T22–T24 remain unfinished; no release artifacts have been
+built or published.
+
+Validation completed:
+
+- `python -m unittest discover -s tests`: **95 passed** on CPython 3.11.14,
+  3.12.12, 3.13.14, and 3.14.7 with newest allowed dependencies. The same 95
+  checks passed on Python 3.13.14 with the minimum allowed dependencies.
+- `.venv/bin/python tests/network_harness.py --smoke`: passed with actual
+  nonlocal IPv4/IPv6 TCP source observation and return traffic, ordinary UDP
+  services, HTTP keepalive, verified HTTPS/SNI, and source ranges absent from
+  interface addresses. Client capability sets were all zero.
+- Harness `--self-check` and `--cleanup-smoke`: passed injected setup/cleanup
+  failure checks and real namespace teardown after client failure.
+- A real source-bound nonblocking socket transferred to
+  `asyncio.open_connection(sock=...)` and returned echo traffic successfully.
+
+Resume with **T20**, then T22, T23, and T24 in dependency order. T20 has no draft
+file; its agent only reviewed existing contracts. Review note to consider there:
+programmatic `patch()` currently defers interface-name validation to socket
+preparation, while `patch_from_env()` validates before installation. Decide
+whether to validate programmatic patch configuration early and cover it with a
+focused check. No related implementation change has been made.
+
+Local ignored environments are ready: `.venv` (Python 3.13/newest), `.venv-min`
+(Python 3.13/minimum), and `.venv-3.11`, `.venv-3.12`, `.venv-3.14` (newest).
+Harness usage is `python tests/network_harness.py -- <client command>`; it
+bootstraps private user/mount/network namespaces when host sudo is unavailable.
+Setup warms primary IPv6 neighbor discovery before off-link source traffic.
+Run socket/network tests outside the read-only sandbox; inside it, ordinary
+socket creation fails with `EPERM`.
+
+The full T22 parity suite and T23 CI/usage documentation remain acceptance
+requirements. T21 smoke success alone does not mark them complete. Root usage
+README, compatibility CI, and distribution smoke tests are still future work.
 
 ## File reservations and interfaces
 
