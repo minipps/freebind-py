@@ -272,7 +272,7 @@ traffic, use:
 
 The [CI workflow](.github/workflows/tests.yml) configures unit jobs for CPython
 3.11–3.14 with minimum and newest allowed optional dependencies, namespace jobs
-for both dependency sets on CPython 3.14, and an ARM64 CPython 3.14 smoke job
+for both dependency sets on CPython 3.12, and an ARM64 CPython 3.14 smoke job
 with newest allowed dependencies. This describes configured coverage; consult
 the workflow run status for results for a particular revision.
 
