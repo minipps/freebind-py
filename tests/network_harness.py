@@ -27,7 +27,7 @@ import sys
 import threading
 import time
 from typing import Sequence
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -74,12 +74,18 @@ def _setpriv_identity_args() -> list[str]:
     if os.geteuid() != 0 or not (_has_capability("CAP_NET_ADMIN") and _has_capability("CAP_SYS_ADMIN")):
         return []
     try:
-        if os.stat("/proc/self/ns/user").st_ino != os.stat("/proc/1/ns/user").st_ino:
+        if Path("/proc/self/uid_map").read_text(encoding="ascii").split() != ["0", "0", "4294967295"]:
             return []
     except OSError:
         return []
     uid, gid = os.environ.get("SUDO_UID", ""), os.environ.get("SUDO_GID", "")
-    if not uid.isascii() or not uid.isdecimal() or not gid.isascii() or not gid.isdecimal() or int(uid) == 0:
+    if (
+        not uid.isascii()
+        or not uid.isdecimal()
+        or not gid.isascii()
+        or not gid.isdecimal()
+        or int(uid) == 0
+    ):
         return []
     return [f"--reuid={uid}", f"--regid={gid}", "--clear-groups"]
 
@@ -657,7 +663,7 @@ def _setup_failure_self_check():
         patch("os.geteuid", return_value=0),
         patch(__name__ + "._has_capability", return_value=True),
         patch.dict(os.environ, {"SUDO_UID": "1000", "SUDO_GID": "1001"}),
-        patch("os.stat", side_effect=[Mock(st_ino=1), Mock(st_ino=1)]),
+        patch.object(Path, "read_text", return_value="0 0 4294967295\n"),
     ):
         assert _setpriv_identity_args() == ["--reuid=1000", "--regid=1001", "--clear-groups"]
     harness = NetworkHarness()
