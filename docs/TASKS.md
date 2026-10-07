@@ -14,11 +14,11 @@ with success. Owners remain unassigned until actual dispatch.
 
 | ID | Task | Dependencies | Status | Owner | Handoff / revision / blocker |
 | --- | --- | --- | --- | --- | --- |
-| T01 | Ratify contract and licensing baseline | None | pending | — | — |
-| T02 | Package scaffold and optional extras | T01 | pending | — | — |
-| T03 | Arbitrary-prefix address generator | T02 | pending | — | — |
+| T01 | Ratify contract and licensing baseline | None | done | coordinator | Contract ratified unchanged; Python 3.14.7/Linux |
+| T02 | Package scaffold and optional extras | T01 | done | coordinator | Editable all-extra installation passed; GPL text and typing marker included |
+| T03 | Arbitrary-prefix address generator | T02 | in_progress | source | Reserved owning implementation/test files |
 | T04 | Source policy and sticky selection | T03 | pending | — | — |
-| T05 | Linux Freebind option setup | T02 | pending | — | — |
+| T05 | Linux Freebind option setup | T02 | in_progress | core | Reserved owning implementation/test files |
 | T06 | Interface setup and bound socket factories | T04, T05 | pending | — | — |
 | T07 | Synchronous connection helper | T06 | pending | — | — |
 | T08 | Asyncio connection helper | T07 | pending | — | — |

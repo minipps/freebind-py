@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "freebind-py"
+version = "0.1.0"
+description = "Linux Freebind source policies for Python sockets and HTTP clients"
+requires-python = ">=3.11"
+license = "GPL-3.0-only"
+license-files = ["LICENSE"]
+classifiers = ["Operating System :: POSIX :: Linux", "Programming Language :: Python :: 3"]
+
+[project.optional-dependencies]
+requests = ["requests>=2.34.2,<3", "urllib3>=2.7,<3"]
+aiohttp = ["aiohttp>=3.13.5,<4"]
+httpx = ["httpx>=0.28.1,<0.29", "httpcore>=1.0.9,<1.1", "anyio>=4.10,<5"]
+all = ["requests>=2.34.2,<3", "urllib3>=2.7,<3", "aiohttp>=3.13.5,<4", "httpx>=0.28.1,<0.29", "httpcore>=1.0.9,<1.1", "anyio>=4.10,<5"]
+
+[tool.setuptools.package-data]
+freebind = ["py.typed"]
