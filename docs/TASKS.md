@@ -26,7 +26,7 @@ with success. Owners remain unassigned until actual dispatch.
 | T12 | Socket-construction patch timing | T11 | done | patch | Reviewed; 16 patch checks include adopted/accepted/duplicated descriptors |
 | T13 | Explicit environment helper | T12 | done | patch | Reviewed; 20 patch/env checks pass; no import-time activation |
 | T14 | Requests HTTP/HTTPS adapter | T07 | done | requests | Reviewed; six tests on urllib3 2.7/2.8; audit cleanup fixed |
-| T15 | Requests fresh connections | T14 | in_progress | requests | Fresh pool reservation |
+| T15 | Requests fresh connections | T14 | done | requests | Reviewed; nine checks on min/newest including blocking streams, redirects/retries |
 | T16 | aiohttp connector | T06 | done | aiohttp | Eight checks pass on aiohttp 3.13.5/3.14.4; reviewed native seams |
 | T17 | HTTPX sync backend and transport | T07 | done | httpx | d042e7b reviewed; five checks on both dependency environments |
 | T18 | HTTPX asyncio backend and transport | T08, T17 | in_progress | httpx | Reserved owning implementation/check paths |

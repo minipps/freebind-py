@@ -68,17 +68,48 @@ class _FreebindHTTPSConnection(_FreebindConnection, HTTPSConnection):
     pass
 
 
-class _FreebindHTTPConnectionPool(HTTPConnectionPool):
+class _FreebindPoolMixin:
+    def __init__(self, *args: Any, fresh: bool, **kwargs: Any) -> None:
+        self._freebind_fresh = fresh
+        super().__init__(*args, **kwargs)
+
+    def _put_conn(self, conn: Any) -> None:
+        if self._freebind_fresh and conn is not None:
+            try:
+                conn.close()
+            finally:
+                super()._put_conn(None)
+            return
+        super()._put_conn(conn)
+
+    def urlopen(self, *args: Any, **kwargs: Any) -> Any:
+        response = super().urlopen(*args, **kwargs)
+        if self._freebind_fresh and getattr(response, "_connection", None) is not None:
+            # urllib3.close() closes unread sockets without returning their pool slot.
+            original_close = response.close
+
+            def close() -> None:
+                try:
+                    response.release_conn()
+                finally:
+                    original_close()
+
+            response.close = close
+        return response
+
+
+class _FreebindHTTPConnectionPool(_FreebindPoolMixin, HTTPConnectionPool):
     ConnectionCls = _FreebindHTTPConnection
 
 
-class _FreebindHTTPSConnectionPool(HTTPSConnectionPool):
+class _FreebindHTTPSConnectionPool(_FreebindPoolMixin, HTTPSConnectionPool):
     ConnectionCls = _FreebindHTTPSConnection
 
 
 class _FreebindPoolManager(PoolManager):
-    def __init__(self, *args: Any, source: Source, **kwargs: Any) -> None:
+    def __init__(self, *args: Any, source: Source, fresh: bool, **kwargs: Any) -> None:
         self.source = source
+        self.fresh = fresh
         super().__init__(*args, **kwargs)
         self.pool_classes_by_scheme = self.pool_classes_by_scheme.copy()
         self.pool_classes_by_scheme.update(
@@ -100,6 +131,7 @@ class _FreebindPoolManager(PoolManager):
         )
         # Inject policy only after urllib3 has built its immutable pool key.
         context["source"] = self.source
+        context["fresh"] = self.fresh
         return super()._new_pool(scheme, host, port, request_context=context)
 
 
@@ -132,6 +164,7 @@ class FreebindAdapter(HTTPAdapter):
             maxsize=maxsize,
             block=block,
             source=self.source,
+            fresh=self.fresh,
             **pool_kwargs,
         )
 
