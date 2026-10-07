@@ -1,9 +1,7 @@
 # Atomic implementation tasks
 
 Behavior is defined in [PLAN.md](PLAN.md). Read [README.md](README.md) for
-concurrent-agent rules before claiming work. All tasks below are initially
-**pending**: research and documentation are available, but no implementation
-task or runtime acceptance gate is complete.
+concurrent-agent rules before claiming work. The ledger below records implementation and acceptance evidence.
 
 ## Ownership and progress
 
@@ -19,22 +17,22 @@ with success. Owners remain unassigned until actual dispatch.
 | T03 | Arbitrary-prefix address generator | T02 | done | source | Reviewed; full deterministic suite 19 tests passed |
 | T04 | Source policy and sticky selection | T03 | done | source | Reviewed; full deterministic suite 19 tests passed |
 | T05 | Linux Freebind option setup | T02 | done | core | Reviewed; full deterministic suite 19 tests passed |
-| T06 | Interface setup and bound socket factories | T04, T05 | in_progress | core_options | Socket factory/interface reservation; original hooks in _socket |
-| T07 | Synchronous connection helper | T06 | pending | — | — |
+| T06 | Interface setup and bound socket factories | T04, T05 | done | core_options | 16 socket tests and live UDP/fallback binds passed; bypass hooks established |
+| T07 | Synchronous connection helper | T06 | in_progress | core_options | Reserved owning files; baseline T06 integrated |
 | T08 | Asyncio connection helper | T07 | pending | — | — |
 | T09 | UDP recipes and behavior checks | T06, T08 | pending | — | — |
-| T10 | Patch lifecycle and ownership | T04, T06 | pending | — | — |
+| T10 | Patch lifecycle and ownership | T04, T06 | in_progress | patch | Reserved owning files; baseline T06 integrated |
 | T11 | Outgoing-operation patch hooks | T10 | pending | — | — |
 | T12 | Socket-construction patch timing | T11 | pending | — | — |
 | T13 | Explicit environment helper | T12 | pending | — | — |
 | T14 | Requests HTTP/HTTPS adapter | T07 | pending | — | — |
 | T15 | Requests fresh connections | T14 | pending | — | — |
-| T16 | aiohttp connector | T06 | pending | — | — |
+| T16 | aiohttp connector | T06 | in_progress | aiohttp | Reserved owning files; baseline T06 integrated |
 | T17 | HTTPX sync backend and transport | T07 | pending | — | — |
 | T18 | HTTPX asyncio backend and transport | T08, T17 | pending | — | — |
 | T19 | HTTPX fresh connections | T18 | pending | — | — |
 | T20 | Cross-adapter failure and isolation checks | T13, T15, T16, T19 | pending | — | — |
-| T21 | Isolated namespace harness | T06 | pending | — | — |
+| T21 | Isolated namespace harness | T06 | in_progress | namespace | Reserved owning files; baseline T06 integrated |
 | T22 | End-to-end parity suite | T09, T12, T20, T21 | pending | — | — |
 | T23 | Compatibility CI and usage documentation | T22 | pending | — | — |
 | T24 | Build and smoke-test release artifacts | T23 | pending | — | — |
