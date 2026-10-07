@@ -1,0 +1,3 @@
+recursive-include examples *.py
+recursive-include tests *.py *.pem *.key
+include .github/workflows/tests.yml
