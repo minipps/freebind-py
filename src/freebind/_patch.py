@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import errno
 import functools
 import socket
 import threading
@@ -14,15 +15,43 @@ from ._source import Source
 _PATCHED_METHODS = {
     "connect": _socket._ORIGINAL_CONNECT,
     "connect_ex": _socket._ORIGINAL_CONNECT_EX,
+    "sendto": _socket._ORIGINAL_SENDTO,
 }
+if _socket._ORIGINAL_SENDMSG is not None:
+    _PATCHED_METHODS["sendmsg"] = _socket._ORIGINAL_SENDMSG
 _ACTIVE_PATCH: PatchHandle | None = None
 _PATCH_LOCK = threading.RLock()
 _MISSING = object()
 
 
-def _forward(original: Callable) -> Callable:
+def _prepare(sock: socket.socket, handle: PatchHandle, *, udp_only: bool = False) -> None:
+    with _PATCH_LOCK:
+        if _ACTIVE_PATCH is not handle or handle._restored or handle.entrypoint != "connect":
+            return
+    if sock.family not in (socket.AF_INET, socket.AF_INET6):
+        return
+    try:
+        socket_type = _socket._socket_type(sock.type)
+    except (TypeError, ValueError):
+        return
+    flags = getattr(socket, "SOCK_NONBLOCK", 0) | getattr(socket, "SOCK_CLOEXEC", 0)
+    socket_type &= ~flags
+    if socket_type not in handle.socket_types or (udp_only and socket_type != socket.SOCK_DGRAM):
+        return
+    if _socket._is_explicit_socket(sock) or not _socket._is_unbound(sock):
+        return
+    _socket.bind_socket(sock, handle.source)
+
+
+def _hook(name: str, original: Callable, handle: PatchHandle) -> Callable:
     @functools.wraps(original)
     def method(sock, *args, **kwargs):
+        try:
+            _prepare(sock, handle, udp_only=name in ("sendto", "sendmsg"))
+        except OSError as exc:
+            if name == "connect_ex":
+                return exc.errno or errno.EIO
+            raise
         return original(sock, *args, **kwargs)
 
     return method
@@ -109,7 +138,8 @@ def patch(
             name: cls.__dict__.get(name, _MISSING) for name in _PATCHED_METHODS
         }
         handle._installed = {
-            name: _forward(original) for name, original in _PATCHED_METHODS.items()
+            name: _hook(name, original, handle)
+            for name, original in _PATCHED_METHODS.items()
         }
         installed = []
         try:

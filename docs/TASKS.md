@@ -22,8 +22,8 @@ with success. Owners remain unassigned until actual dispatch.
 | T08 | Asyncio connection helper | T07 | in_progress | core_options | Reserved owning implementation/check paths |
 | T09 | UDP recipes and behavior checks | T06, T08 | pending | — | — |
 | T10 | Patch lifecycle and ownership | T04, T06 | done | patch | Lifecycle reviewed; six restoration/class-identity checks passed |
-| T11 | Outgoing-operation patch hooks | T10 | in_progress | patch | Outgoing hook reservation; T10 reviewed |
-| T12 | Socket-construction patch timing | T11 | pending | — | — |
+| T11 | Outgoing-operation patch hooks | T10 | done | patch | Reviewed; 12 patch tests pass including UDP/SSL/errno bypass |
+| T12 | Socket-construction patch timing | T11 | in_progress | patch | Constructor hook reservation |
 | T13 | Explicit environment helper | T12 | pending | — | — |
 | T14 | Requests HTTP/HTTPS adapter | T07 | in_progress | requests | Reserved owning implementation/check paths |
 | T15 | Requests fresh connections | T14 | pending | — | — |
