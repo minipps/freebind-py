@@ -5,11 +5,15 @@ from __future__ import annotations
 import socket
 from typing import Any, Iterable
 
+import anyio
 import httpcore
+from anyio.abc import SocketStream
+from httpcore._backends.anyio import AnyIOStream as _AnyIOStream
 from httpcore._backends.sync import SyncStream as _SyncStream
+from httpx import AsyncHTTPTransport as _AsyncHTTPTransport
 from httpx import HTTPTransport as _HTTPTransport
 
-from ._socket import create_connection
+from ._socket import async_create_connection, create_connection, _close_failed_socket
 from ._source import Source
 
 
@@ -56,7 +60,7 @@ class _SyncFreebindBackend(httpcore.SyncBackend):
         try:
             return _SyncStream(sock)
         except BaseException:
-            sock.close()
+            _close_failed_socket(sock)
             raise
 
 
@@ -81,3 +85,77 @@ class FreebindTransport(_HTTPTransport):
         self._freebind_backend = _SyncFreebindBackend(source)
         _install_network_backend(self._pool, self._freebind_backend)
 
+
+
+class _AsyncFreebindBackend(httpcore.AnyIOBackend):
+    def __init__(self, source: Source) -> None:
+        self._source = source
+
+    async def connect_tcp(
+        self,
+        host: str,
+        port: int,
+        timeout: float | None = None,
+        local_address: str | None = None,
+        socket_options: Iterable[tuple] | None = None,
+    ) -> _AnyIOStream:
+        if local_address is not None:
+            raise ValueError("local_address conflicts with the Freebind source")
+
+        options = list(socket_options or ())
+        options.append((socket.IPPROTO_TCP, socket.TCP_NODELAY, 1))
+        try:
+            sock = await async_create_connection(
+                (host, port),
+                self._source,
+                timeout=timeout,
+                socket_options=options,
+            )
+        except TimeoutError as exc:
+            raise httpcore.ConnectTimeout(str(exc)) from exc
+        except OSError as exc:
+            raise httpcore.ConnectError(str(exc)) from exc
+
+        try:
+            stream = await SocketStream.from_socket(sock)
+        except TimeoutError as exc:
+            _close_failed_socket(sock)
+            raise httpcore.ConnectTimeout(str(exc)) from exc
+        except (OSError, anyio.BrokenResourceError) as exc:
+            _close_failed_socket(sock)
+            raise httpcore.ConnectError(str(exc)) from exc
+        except BaseException:
+            _close_failed_socket(sock)
+            raise
+
+        try:
+            return _AnyIOStream(stream)
+        except BaseException:
+            with anyio.CancelScope(shield=True):
+                try:
+                    await stream.aclose()
+                except BaseException:
+                    pass
+            raise
+
+
+class AsyncFreebindTransport(_AsyncHTTPTransport):
+    """HTTPX asynchronous transport for asyncio source-bound connections."""
+
+    def __init__(self, source: Source, *, fresh: bool = False, **kwargs: Any) -> None:
+        if not isinstance(source, Source):
+            raise TypeError("source must be a Source")
+        if not isinstance(fresh, bool):
+            raise TypeError("fresh must be a bool")
+        if kwargs.get("proxy") is not None:
+            raise ValueError("AsyncFreebindTransport does not support proxies")
+        if kwargs.get("uds") is not None:
+            raise ValueError("uds conflicts with the Freebind TCP source")
+        if kwargs.get("local_address") is not None:
+            raise ValueError("local_address conflicts with the Freebind source")
+
+        super().__init__(**kwargs)
+        self._freebind_source = source
+        self.fresh = fresh
+        self._freebind_backend = _AsyncFreebindBackend(source)
+        _install_network_backend(self._pool, self._freebind_backend)
