@@ -33,8 +33,8 @@ with success. Owners remain unassigned until actual dispatch.
 | T19 | HTTPX fresh connections | T18 | done | httpx | Reviewed; 16 sync/async checks on min/newest incl fresh streams/retries |
 | T20 | Cross-adapter failure and isolation checks | T13, T15, T16, T19 | done | contract_resume | Reviewed; four cross-area checks and 100 full checks pass on min/newest |
 | T21 | Isolated namespace harness | T06 | done | namespace | Reviewed; real v4/v6 smoke, zero client capabilities and failure cleanup pass |
-| T22 | End-to-end parity suite | T09, T12, T20, T21 | in_progress | network_parity | Reserved tests/test_network.py; dependencies integrated |
-| T23 | Compatibility CI and usage documentation | T22 | pending | — | — |
+| T22 | End-to-end parity suite | T09, T12, T20, T21 | done | network_parity | Reviewed; eight real namespace checks pass on min/newest, zero skips/capabilities |
+| T23 | Compatibility CI and usage documentation | T22 | in_progress | ci_examples + usage_docs | CI/examples and documentation reservations assigned separately |
 | T24 | Build and smoke-test release artifacts | T23 | pending | — | — |
 
 ## Stable checkpoint — 2026-10-07
