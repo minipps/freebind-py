@@ -28,8 +28,8 @@ Run unit tests with:
 .venv/bin/python -m unittest discover -s tests
 ```
 
-Outside the namespace harness, the eight real-network tests are intentionally
-skipped. To run the eight parity checks with real IPv4/IPv6 source and return
+Outside the namespace harness, the real-network tests are intentionally
+skipped. To run the parity checks with real IPv4/IPv6 source and return
 traffic, use:
 
 ```sh

@@ -47,7 +47,7 @@ jobs:
           python -m venv .venv
           .venv/bin/python -m pip install --editable . \
             "requests==2.34.2" "urllib3==2.7" "aiohttp==3.13.5" \
-            "httpx==0.28.1" "httpcore==1.0.9" "anyio==4.10"
+            "httpx==0.28.1" "httpcore==1.0.9" "anyio==4.10" "curl_cffi==0.16.3"
       - name: Install newest allowed clients
         if: matrix.dependencies == 'newest'
         run: |
@@ -57,7 +57,7 @@ jobs:
         run: .venv/bin/python -m unittest discover -s tests -v
       - name: Check runnable examples
         run: |
-          for example in examples/requests_client.py examples/aiohttp_client.py examples/httpx_client.py examples/patch.py; do
+          for example in examples/requests_client.py examples/aiohttp_client.py examples/httpx_client.py examples/curl_cffi_client.py examples/patch.py; do
             .venv/bin/python "$example" --help >/dev/null
           done
 
@@ -83,7 +83,7 @@ jobs:
         run: |
           .venv/bin/python -m pip install --editable . \
             "requests==2.34.2" "urllib3==2.7" "aiohttp==3.13.5" \
-            "httpx==0.28.1" "httpcore==1.0.9" "anyio==4.10"
+            "httpx==0.28.1" "httpcore==1.0.9" "anyio==4.10" "curl_cffi==0.16.3"
       - name: Install newest allowed clients
         if: matrix.dependencies == 'newest'
         run: |
@@ -113,6 +113,6 @@ jobs:
         run: .venv/bin/python -m unittest discover -s tests -v
       - name: Check runnable examples
         run: |
-          for example in examples/requests_client.py examples/aiohttp_client.py examples/httpx_client.py examples/patch.py; do
+          for example in examples/requests_client.py examples/aiohttp_client.py examples/httpx_client.py examples/curl_cffi_client.py examples/patch.py; do
             .venv/bin/python "$example" --help >/dev/null
           done

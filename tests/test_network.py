@@ -450,3 +450,61 @@ class AsyncNetworkParityTests(unittest.IsolatedAsyncioTestCase):
                     with _resolve_test_hostname(peer):
                         await client.get(url, timeout=4)
                 self.assertIn("CERTIFICATE_VERIFY_FAILED", str(failure.exception))
+
+
+@_requires_harness
+class CurlCffiNetworkTests(unittest.IsolatedAsyncioTestCase):
+    async def test_curl_cffi_nonlocal_tls_pooling_rotation_and_concurrency(self):
+        from curl_cffi import CurlOpt
+        from curl_cffi.requests.exceptions import RequestException
+        from freebind import Source
+        from freebind.curl_cffi import AsyncFreebindSession, FreebindSession
+
+        for family, peer, _client, suffix in _families():
+            options = {
+                "impersonate": "chrome",
+                "verify": _env("CA_FILE"),
+                "timeout": 4,
+                "curl_options": {CurlOpt.RESOLVE: [
+                    f"{_TLS_HOST}:{_env('HTTPS_PORT')}:{'[' + peer + ']' if suffix == '6' else peer}"
+                ]},
+            }
+            expected = _source_address(family, 7)
+            source = Source(expected)
+            with FreebindSession(source, **options) as client:
+                pooled = [client.get(_https_url()).json() for _ in range(2)]
+            with FreebindSession(source, fresh=True, **options) as client:
+                fresh = [client.get(_https_url()).json() for _ in range(2)]
+            _assert_pool_reports(self, pooled, fresh, expected)
+            self.assertTrue(all(r["tls_server_name"] == _TLS_HOST for r in (*pooled, *fresh)))
+
+            async with AsyncFreebindSession(source, **options) as client:
+                pooled = [(await client.get(_https_url())).json() for _ in range(2)]
+            async with AsyncFreebindSession(source, fresh=True, **options) as client:
+                fresh = [(await client.get(_https_url())).json() for _ in range(2)]
+            _assert_pool_reports(self, pooled, fresh, expected)
+
+            for session_cls in (FreebindSession, AsyncFreebindSession):
+                with mock_patch("freebind._source.secrets.randbits", side_effect=[17, 18]):
+                    random_source = Source(_random_prefix(family), bits=8)
+                    if session_cls is FreebindSession:
+                        with session_cls(random_source, fresh=True, **options) as client:
+                            reports = [client.get(_https_url()).json() for _ in range(2)]
+                    else:
+                        async with session_cls(random_source, fresh=True, **options) as client:
+                            reports = [(await client.get(_https_url())).json() for _ in range(2)]
+                _assert_fresh_source_reports(self, reports, [_source_address(family, n) for n in (17, 18)])
+
+            dual = Source([_env("SOURCE4"), _env("SOURCE6")])
+            async with AsyncFreebindSession(dual, fresh=True, max_clients=4, **options) as client:
+                responses = await asyncio.gather(*(client.get(_https_url()) for _ in range(8)))
+                network = ipaddress.ip_network(_env(f"SOURCE{suffix}"))
+                self.assertTrue(all(ipaddress.ip_address(r.json()["source"]) in network for r in responses))
+
+            untrusted = dict(options, verify=True)
+            with FreebindSession(source, **untrusted) as client:
+                with self.assertRaises(RequestException):
+                    client.get(_https_url())
+            async with AsyncFreebindSession(source, **untrusted) as client:
+                with self.assertRaises(RequestException):
+                    await client.get(_https_url())
