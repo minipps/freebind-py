@@ -8,120 +8,35 @@ socket operations require Linux. The compatibility workflow targets Python
 
 ## Install
 
-From a checkout, install the core or an integration extra:
+Requires Python 3.11 or newer. Socket operations require Linux.
+
+Install the core or the integration you need from PyPI:
 
 ```sh
-python -m pip install .
-python -m pip install '.[requests]'
-python -m pip install '.[aiohttp]'
-python -m pip install '.[httpx]'
-python -m pip install '.[all]'
+python -m pip install freebind-py
+python -m pip install 'freebind-py[requests]'
+python -m pip install 'freebind-py[aiohttp]'
+python -m pip install 'freebind-py[httpx]'
+python -m pip install 'freebind-py[all]'
 ```
 
-The distribution metadata identifies this project as `freebind-py` version
-`0.1.0`; these commands install the checkout and do not imply a PyPI release.
+The distribution is named `freebind-py`; import it as `freebind`.
 
-| Extra | Allowed dependencies |
-| --- | --- |
-| `requests` | `requests>=2.34.2,<3`, `urllib3>=2.7,<3` |
-| `aiohttp` | `aiohttp>=3.13.5,<4` |
-| `httpx` | `httpx>=0.28.1,<0.29`, `httpcore>=1.0.9,<1.1`, `anyio>=4.10,<5` |
-| `all` | All three integrations |
+## Quick start
 
-## Choose a source
-
-A bare IP is a fixed, single-address source. By default, a CIDR is sampled in
-`random` mode whenever a new socket is bound. `sticky` selects one address per
-configured family when `Source` is created and keeps it for that policy. Sharing
-a `Source` shares its sticky address.
+Use a source address your network routes to this machine. This example uses
+loopback so it can run locally without configuring nonlocal routes:
 
 ```python
 import socket
-from freebind import Source, random_ip
+from freebind import Source, new_socket
 
-# Randomize the first 4 host bits; the remaining host bits are zero.
-address = random_ip("198.51.100.0/24", bits=4)
-random_source = Source("198.51.100.0/24", bits=4)
-fixed_source = Source("198.51.100.17")
-sticky_source = Source("198.51.100.0/24", mode="sticky", bits=4)
-
-both_families = Source(("198.51.100.0/24", "2001:db8:100::/64"))
-assert both_families.families == frozenset({socket.AF_INET, socket.AF_INET6})
-assert Source("198.51.100.17", strict=False).select(socket.AF_INET6) is None
+with new_socket(Source("127.0.0.1"), type=socket.SOCK_DGRAM) as sock:
+    print(sock.getsockname())
 ```
 
-The documentation-only addresses above will not route on a real network. Replace
-them with a prefix that your network routes for you. Pass `interface="eth0"` to
-`Source(prefixes, ...)` to request Linux `SO_BINDTODEVICE`; kernel permissions
-and errors apply. `bits=None` (the default) randomizes all host bits; `bits=0` selects the network base. Prefixes are
-normalized, and repeated prefixes count as repeated choices. Random selection
-does not guarantee unique addresses.
-
-`Source.select(family)` returns the selected address. The default `strict=True`
-raises `FamilyMismatchError` if no prefix matches that family. With
-`strict=False`, `select()` returns `None` for an absent family; socket helpers
-bind the wildcard address in that case. For connection helpers, fallback to an
-unconfigured family is allowed only when DNS has no matching destination
-family. A bind or connection failure never triggers fallback. Mixed-family
-policies require `family=` when calling `new_socket()`.
-
-Scoped IPv6, link-local, and IPv4-mapped IPv6 source prefixes are rejected.
-
-## Sockets
-
-`enable_freebind(sock)` sets Linux's Freebind option. `bind_socket(sock, source,
-port=0)` applies a policy to an unbound caller-owned socket. `new_socket()`
-creates a bound, unconnected TCP or UDP socket; it returns a caller-owned socket
-that should be closed normally.
-
-```python
-from freebind import Source, create_connection, new_socket
-import socket
-
-source = Source("198.51.100.17")
-with new_socket(source, type=socket.SOCK_DGRAM) as udp:
-    udp.settimeout(3)
-    udp.sendto(b"hello", ("peer.example", 9000))
-    reply, peer = udp.recvfrom(65535)
-
-# TCP connection helpers return caller-owned connected sockets.
-sock = create_connection(("peer.example", 9000), source, timeout=3)
-sock.close()
-```
-
-For asyncio, await
-`async_create_connection((host, port), source, timeout=...)`; it returns a
-connected nonblocking socket that you can transfer to
-`asyncio.open_connection(sock=sock)` or another asyncio transport. Close the
-socket yourself if you do not transfer it. Helpers close sockets they own when
-setup or connection fails. `create_connection()` and
-`async_create_connection()` accept `timeout` and `socket_options` tuples; async
-resolution does not block the event loop. To hand an async socket to asyncio:
-
-```python
-import asyncio
-from freebind import Source, async_create_connection
-
-async def open_stream(host, port):
-    sock = await async_create_connection((host, port), Source("198.51.100.17"))
-    try:
-        return await asyncio.open_connection(sock=sock)
-    except BaseException:
-        sock.close()
-        raise
-```
-
-On success, the asyncio writer owns the transferred socket.
-
-See [examples/udp.py](examples/udp.py) for connected and unconnected UDP, sync
-and asyncio modes. The example expects a reachable UDP echo service.
-
-## HTTP clients
-
-The adapters preserve each client’s TLS, SNI, timeout, streaming, retry, and
-redirect behavior. Normal pooling is the default. Set `trust_env=False` so
-ambient proxy variables cannot reroute example requests. Explicit proxies are
-not supported by these Freebind integrations.
+For a routed prefix, create a policy and pass it to a socket helper or HTTP
+integration. Replace the documentation address and URL with your own:
 
 ```python
 import requests
@@ -131,210 +46,40 @@ from freebind.requests import FreebindAdapter
 source = Source("198.51.100.17")
 with requests.Session() as client:
     client.trust_env = False
-    client.mount("http://", FreebindAdapter(source))
     client.mount("https://", FreebindAdapter(source))
-    response = client.get("https://service.example/", timeout=5, verify="ca.pem")
-```
-
-For aiohttp, use the connector with the session’s native TLS options:
-
-```python
-import aiohttp
-import ssl
-from freebind import Source
-from freebind.aiohttp import FreebindConnector
-
-async def fetch(url):
-    connector = FreebindConnector(Source("198.51.100.17"))
-    context = ssl.create_default_context(cafile="ca.pem")
-    async with aiohttp.ClientSession(
-        connector=connector, trust_env=False
-    ) as client:
-        async with client.get(url, ssl=context, timeout=5) as response:
-            return await response.text()
-```
-
-HTTPX uses a transport; pass native TLS settings to it and disable environment
-proxy discovery on the client:
-
-```python
-import httpx
-import ssl
-from freebind import Source
-from freebind.httpx import FreebindTransport
-
-context = ssl.create_default_context(cafile="ca.pem")
-transport = FreebindTransport(Source("198.51.100.17"), verify=context)
-with httpx.Client(transport=transport, trust_env=False) as client:
     response = client.get("https://service.example/", timeout=5)
+    response.raise_for_status()
 ```
 
-Use `AsyncFreebindTransport` with `httpx.AsyncClient` for asyncio:
+Install the `requests` extra to use this example. aiohttp and HTTPX integrations
+also support asyncio; HTTPX provides both sync and async transports.
 
-```python
-import httpx
-from freebind import Source
-from freebind.httpx import AsyncFreebindTransport
+## Source policies and connections
 
-async def fetch(url):
-    transport = AsyncFreebindTransport(Source("198.51.100.17"))
-    async with httpx.AsyncClient(transport=transport, trust_env=False) as client:
-        response = await client.get(url, timeout=5)
-        return response.text
-```
+- An IP selects a fixed source address.
+- A CIDR selects a random address for each new socket.
+- `Source(prefix, mode="sticky")` selects one address per configured family and
+  reuses it for that policy.
+- `bits=` controls how many leading host bits are randomized.
+- HTTP clients pool connections by default. Pass `fresh=True` to an adapter,
+  connector, or transport to create a new connection per request.
 
-For mTLS, certificates, or custom trust roots, use the client’s usual options:
-Requests `verify`/`cert`, aiohttp `ssl`, and HTTPX transport `verify`/`cert`.
-See [examples/requests_client.py](examples/requests_client.py),
-[examples/aiohttp_client.py](examples/aiohttp_client.py), and
-[examples/httpx_client.py](examples/httpx_client.py) for runnable clients.
+Freebind allows binding nonlocal addresses; it does not configure routing.
+The machine needs a local route for the source prefix, the peer needs a return
+route, and the upstream network must carry the traffic. A successful bind alone
+does not establish reachability. Explicit HTTP proxies are unsupported; disable
+environment proxies with `trust_env=False`.
 
-### Pooling and fresh connections
+## Documentation
 
-A pooled connection keeps the source address it used when created. With
-`fresh=True`, each transmitted request uses a new TCP connection, including
-redirect and retry attempts. This does not mean a unique IP: fixed and sticky
-sources keep selecting the same address, and random draws may repeat. A live
-streaming response keeps its connection until consumed or closed. HTTPX fresh
-mode requires HTTP/1.1 and rejects HTTP/2.
+The [user guide](https://github.com/minipps/freebind-py/blob/main/docs/README.md)
+covers IPv4/IPv6 source selection, TCP/UDP sockets, asyncio, Requests, aiohttp,
+HTTPX, TLS, pooling, process-wide patching, and troubleshooting.
+Documentation and runnable examples are also included in the source distribution
+under `docs/` and `examples/`.
 
-## Optional process-wide patch
-
-`patch()` temporarily hooks the existing `socket.socket` class. Its default
-`entrypoint="connect"` prepares unbound TCP sockets on connect and UDP sockets
-on their first send. `entrypoint="socket"` binds eligible sockets during
-construction, so a later explicit `bind()` can fail. `socket_types` filters the
-TCP/UDP types. Only one Freebind patch may be active at a time; restore its
-`PatchHandle` or use it as a context manager:
-
-```python
-from freebind import Source, patch
-
-with patch(Source("198.51.100.17"), entrypoint="connect"):
-    pass
-```
-
-The patch is process-wide and can conflict with other code that replaces the
-same socket methods; `restore()` refuses to overwrite methods changed while the
-patch is active. Socket-construction timing affects newly created sockets, not
-adopted, accepted, or duplicated descriptors. It patches the existing class, so
-aliases to `socket.socket` see the hooks; saved references to original methods do
-not.
-Library helpers and adapters preserve their explicit source policy and bypass
-the hooks to avoid double binding.
-
-This is Python-level interception, not `LD_PRELOAD`: it does not cover native
-extensions, direct `socket._socket` calls, cached original methods, or native
-event-loop socket creation such as uvloop. It provides no subprocess
-inheritance guarantee. Applications needing libc-level interception can use
-the [original Freebind launcher](https://github.com/blechschmidt/freebind).
-
-`patch_from_env()` reads settings only when called; importing `freebind` never
-activates a patch. It requires `FREEBIND_RANDOM` (comma/space-separated IPs or
-CIDRs), optionally reads `FREEBIND_IFACE`, accepts `FREEBIND_TYPE_FILTER=STREAM`
-or `DGRAM`, and accepts `FREEBIND_ENTRYPOINT=socket` or `connect`. The
-entrypoint defaults to `socket` for compatibility with the C launcher.
-See [examples/patch.py](examples/patch.py).
-
-## Routing and limits
-
-Freebind permits binding a nonlocal source address; it does not make that source
-reachable. The client needs a suitable local route for the source prefix (often
-an AnyIP `local PREFIX dev lo` route), the peer needs a return route, and the
-upstream network must carry the traffic. For example, add `ip route add local PREFIX dev lo` on the client (use
-`ip -6 route add local PREFIX dev lo` for IPv6) and configure the matching return
-route on the peer. For an on-link prefix, the router also needs to resolve the
-source with ARP or IPv6 Neighbor Discovery (ND); a local route alone does not
-configure upstream neighbor discovery. Readiness depends on
-your Linux routes and network hardware. This library changes no routes, sysctls,
-or firewall rules.
-
-NAT can change the source observed by a remote peer. A proxy makes the proxy’s
-address visible instead, which is why proxies are unsupported and examples turn
-off environment proxy settings. These rules apply independently of source
-selection and connection freshness.
-
-## Checks and compatibility
-
-Install and run the pinned Ruff linter with:
-
-```sh
-python -m pip install --group dev
-ruff check .
-```
-
-Ruff checks Python sources, tests, and examples using its default error rules.
-The `Ruff` CI job runs on pushes and pull requests and is required on `main`.
-
-Run unit tests with:
-
-```sh
-.venv/bin/python -m unittest discover -s tests
-```
-
-Outside the namespace harness, the eight real-network tests are intentionally
-skipped. To run the eight parity checks with real IPv4/IPv6 source and return
-traffic, use:
-
-```sh
-.venv/bin/python tests/network_harness.py -- .venv/bin/python -m unittest discover -s tests -p test_network.py -v
-```
-
-The [CI workflow](.github/workflows/tests.yml) configures unit jobs for CPython
-3.11–3.14 with minimum and newest allowed optional dependencies, namespace jobs
-for both dependency sets on CPython 3.12, and an ARM64 CPython 3.14 smoke job
-with newest allowed dependencies. This describes configured coverage; consult
-the workflow run status for results for a particular revision.
-
-## Publishing and repository security
-
-Publishing is manual and restricted to `minipps` running
-[Publish to PyPI](.github/workflows/publish.yml) from `main`.
-The build verifies that the requested tag belongs to `main`, matches the package
-version, passes unit tests, and produces valid distributions. The separate
-publisher job downloads only this run's artifacts and uses PyPI Trusted
-Publishing with attestations; package code runs without publishing credentials.
-
-Before the first release, configure a [PyPI Trusted Publisher](https://docs.pypi.org/trusted-publishers/adding-a-publisher/)
-(or a [pending publisher](https://pypi.org/manage/account/publishing/) for a new project):
-
-- PyPI project: `freebind-py`
-- GitHub owner: `minipps`
-- Repository: `freebind-py`
-- Workflow filename: `publish.yml`
-- Environment: `pypi`
-
-Set the version in `pyproject.toml`, get the change and passing compatibility
-checks onto `main`, and push the matching tag (for example `v0.1.0`). Then run
-`gh workflow run publish.yml --ref main -f tag=v0.1.0` and inspect the run.
-This publishes the package source, including files selected by `MANIFEST.in`,
-to the public PyPI index even while the GitHub repository is private.
-
-PR workflows use read-only tokens, do not persist checkout credentials, and
-must never execute PR code using `pull_request_target` or privileged
-`workflow_run` workflows. Actions are pinned to full commit SHAs; review
-Dependabot updates before merging. Review package changes as carefully as
-workflow changes: a malicious package can still harm its users after release.
-The sole maintainer retains GitHub's administrator bypass so they can merge
-their own changes; reviews cannot be self-approved. The private repository's
-plan does not support environment reviewers, so explicit owner-only dispatch
-from `main` is the publishing approval gate. Do not remove that gate when
-adding maintainers; configure environment reviewers first.
-
-Live repository settings require Ruff and all 11 compatibility checks, code-owner review,
-stale-review dismissal, and resolved conversations on `main`; fork workflows
-remain disabled, token defaults are read-only, Actions PR approvals are disabled,
-and dependency alerts/security updates are enabled. The Actions allowlist
-contains only the five actions used by these workflows. `CODEOWNERS`, pinned
-workflows, and Dependabot configuration take effect once these files reach `main`.
-After merging the pins, enforce them repository-wide with:
-
-```sh
-gh api --method PUT repos/minipps/freebind-py/actions/permissions \
-  -F enabled=true -f allowed_actions=selected -F sha_pinning_required=true
-```
-
-Enabling that policy before merging would block the current tag-based CI.
+See [contributing and releases](https://github.com/minipps/freebind-py/blob/main/docs/CONTRIBUTING.md)
+for local setup, linting, tests, and publishing.
 
 ## License
 

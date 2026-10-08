@@ -12,6 +12,11 @@ license = "GPL-3.0-only"
 license-files = ["LICENSE"]
 classifiers = ["Operating System :: POSIX :: Linux", "Programming Language :: Python :: 3"]
 
+[project.urls]
+Documentation = "https://github.com/minipps/freebind-py/blob/main/docs/README.md"
+Source = "https://github.com/minipps/freebind-py"
+Issues = "https://github.com/minipps/freebind-py/issues"
+
 [project.optional-dependencies]
 requests = ["requests>=2.34.2,<3", "urllib3>=2.7,<3"]
 aiohttp = ["aiohttp>=3.13.5,<4"]
