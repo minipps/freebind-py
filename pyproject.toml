@@ -16,6 +16,7 @@ classifiers = ["Operating System :: POSIX :: Linux", "Programming Language :: Py
 Documentation = "https://github.com/minipps/freebind-py/blob/main/docs/README.md"
 Source = "https://github.com/minipps/freebind-py"
 Issues = "https://github.com/minipps/freebind-py/issues"
+Changelog = "https://github.com/minipps/freebind-py/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
 requests = ["requests>=2.34.2,<3", "urllib3>=2.7,<3"]

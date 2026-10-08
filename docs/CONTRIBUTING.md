@@ -60,7 +60,8 @@ Before the first release, configure a [PyPI Trusted Publisher](https://docs.pypi
 - Workflow filename: `publish.yml`
 - Environment: `pypi`
 
-Set the version in `pyproject.toml`, get the change and passing compatibility
+Set the version in `pyproject.toml`, update `CHANGELOG.md` with the release date
+and notable changes, get the change and passing compatibility
 checks onto `main`, and push the matching tag (for example `v0.1.0`). Then run
 `gh workflow run publish.yml --ref main -f tag=v0.1.0` and inspect the run.
 This publishes the package source, including files selected by `MANIFEST.in`,
@@ -83,4 +84,3 @@ remain disabled, token defaults are read-only, Actions PR approvals are disabled
 and dependency alerts/security updates are enabled. The Actions allowlist
 contains only the five actions used by these workflows, and full commit SHA
 pinning is enforced repository-wide.
-

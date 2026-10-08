@@ -81,6 +81,9 @@ under `docs/` and `examples/`.
 See [contributing and releases](https://github.com/minipps/freebind-py/blob/main/docs/CONTRIBUTING.md)
 for local setup, linting, tests, and publishing.
 
+See the [changelog](https://github.com/minipps/freebind-py/blob/main/CHANGELOG.md)
+for release notes.
+
 ## License
 
 GPL-3.0-only. The original C Freebind project is also GPL-3.0. The AGPL-3.0
