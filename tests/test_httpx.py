@@ -12,7 +12,6 @@ from freebind._source import Source
 from freebind.httpx import (
     AsyncFreebindTransport,
     FreebindTransport,
-    SocketStream,
     _AnyIOStream,
     _AsyncFreebindBackend,
     _SyncFreebindBackend,

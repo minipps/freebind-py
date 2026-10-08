@@ -59,7 +59,10 @@ class PatchLifecycleTests(unittest.TestCase):
 
     def test_restore_refuses_to_replace_a_later_patch(self):
         handle = _patch.patch(Source("192.0.2.8"))
-        replacement = lambda self, address: None
+
+        def replacement(self, address):
+            return None
+
         self.socket_class.connect = replacement
         try:
             with self.assertRaisesRegex(RuntimeError, "refusing to restore"):
@@ -96,7 +99,10 @@ class PatchLifecycleTests(unittest.TestCase):
         name = "connect"
         had_direct = name in self.socket_class.__dict__
         previous = self.socket_class.__dict__.get(name)
-        replacement = lambda self, address: None
+
+        def replacement(self, address):
+            return None
+
         setattr(self.socket_class, name, replacement)
         try:
             handle = _patch.patch(Source("192.0.2.8"))

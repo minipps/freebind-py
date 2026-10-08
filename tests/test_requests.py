@@ -58,9 +58,6 @@ class _KeepAliveHandler(BaseHTTPRequestHandler):
 
 
 class RequestsAdapterTests(unittest.TestCase):
-    def setUp(self):
-        self.source = Source("198.51.100.0/24")
-
     def test_pool_policy_is_injected_after_key_and_mappings_are_private(self):
         first = FreebindAdapter(self.source, fresh=True)
         second = FreebindAdapter(self.source)

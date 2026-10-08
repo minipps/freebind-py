@@ -256,6 +256,16 @@ selection and connection freshness.
 
 ## Checks and compatibility
 
+Install and run the pinned Ruff linter with:
+
+```sh
+python -m pip install --group dev
+ruff check .
+```
+
+Ruff checks Python sources, tests, and examples using its default error rules.
+The `Ruff` CI job runs on pushes and pull requests and is required on `main`.
+
 Run unit tests with:
 
 ```sh
@@ -311,7 +321,7 @@ plan does not support environment reviewers, so explicit owner-only dispatch
 from `main` is the publishing approval gate. Do not remove that gate when
 adding maintainers; configure environment reviewers first.
 
-Live repository settings require all 11 compatibility checks, code-owner review,
+Live repository settings require Ruff and all 11 compatibility checks, code-owner review,
 stale-review dismissal, and resolved conversations on `main`; fork workflows
 remain disabled, token defaults are read-only, Actions PR approvals are disabled,
 and dependency alerts/security updates are enabled. The Actions allowlist
