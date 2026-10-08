@@ -24,7 +24,7 @@ async def _request(args):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--source", required=True, help="source IPv4/IPv6 address or CIDR")
+    parser.add_argument("--source", required=True, help="source IP or routed CIDR, e.g. 2001:db8:100::/48 (replace with your allocation)")
     parser.add_argument("--url", required=True)
     parser.add_argument("--fresh", action="store_true", help="close each connection after its response")
     parser.add_argument("--sticky", action="store_true", help="reuse one selected source address")
