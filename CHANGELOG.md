@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Optional `curl-cffi` extra with `FreebindSession` and `AsyncFreebindSession`
+  for source-bound requests with curl_cffi browser impersonation.
+- Support for pooled and fresh connections, streaming, redirects, and concurrent
+  asyncio requests; binding errors retain their original cause on buffered requests.
+- curl_cffi sync/async example, documentation, and unit and IPv4/IPv6 namespace
+  coverage, with curl_cffi included in the compatibility workflow.
+
 ## [0.1.1] - 2026-10-08
 
 ### Changed

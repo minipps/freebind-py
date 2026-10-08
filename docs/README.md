@@ -1,7 +1,7 @@
 # freebind-py user guide
 
 Use a routed IPv6 allocation as a pool of source addresses for Python sockets,
-Requests, aiohttp, or HTTPX. Inspired by and credited to
+Requests, aiohttp, HTTPX, or curl_cffi. Inspired by and credited to
 [blechschmidt's original Freebind](https://github.com/blechschmidt/freebind),
 this library exposes explicit Python source policies; IPv4 is also supported.
 See the [project README](../README.md#why-freebind) for the original motivation:
@@ -20,6 +20,7 @@ python -m pip install freebind-py
 python -m pip install 'freebind-py[requests]'
 python -m pip install 'freebind-py[aiohttp]'
 python -m pip install 'freebind-py[httpx]'
+python -m pip install 'freebind-py[curl-cffi]'
 python -m pip install 'freebind-py[all]'
 ```
 
@@ -30,7 +31,8 @@ The distribution is named `freebind-py`; import it as `freebind`.
 | `requests` | `requests>=2.34.2,<3`, `urllib3>=2.7,<3` |
 | `aiohttp` | `aiohttp>=3.13.5,<4` |
 | `httpx` | `httpx>=0.28.1,<0.29`, `httpcore>=1.0.9,<1.1`, `anyio>=4.10,<5` |
-| `all` | All three integrations |
+| `curl-cffi` | `curl_cffi>=0.16.3,<0.17` |
+| `all` | All four integrations |
 
 ## Choose a source
 
@@ -187,8 +189,44 @@ async def fetch(url):
         return response.text
 ```
 
+curl_cffi uses sessions that preserve its native browser impersonation:
+
+```python
+from freebind import Source
+from freebind.curl_cffi import FreebindSession, AsyncFreebindSession
+
+source = Source("2001:db8:100::/64")  # Replace with your routed prefix.
+with FreebindSession(source, impersonate="chrome", fresh=True) as client:
+    response = client.get("https://service.example/", timeout=5)
+
+async def fetch(url):
+    async with AsyncFreebindSession(source, impersonate="chrome") as client:
+        response = await client.get(url, timeout=5)
+        return response.text
+```
+
+Install `freebind-py[curl-cffi]`; supported curl_cffi versions are `>=0.16.3,<0.17`.
+The integration uses a private CFFI socket callback because curl_cffi does not
+expose libcurl's socket callback through `Curl.setopt()`. It reuses `Source`
+and `bind_socket()` while libcurl retains socket ownership, DNS, TLS, and HTTP
+handling. Strict single-family policies restrict libcurl's destination family;
+with `strict=False`, libcurl may use an unconfigured family without a source bind.
+
+Sessions disable environment proxies by default and reject explicit proxies,
+`interface`, custom curl handles, and raw socket/binding options that conflict
+with Freebind. Keep TLS settings (`verify`/`cert`) and `impersonate` on the session
+or request as usual. Buffered request binding errors retain their original
+exception as a cause. Sync sessions create bound handles in each calling thread;
+async sessions use asyncio. HTTP/2 and HTTP/3 remain managed by libcurl, but the
+integration's network tests currently cover HTTP/1.1 over TLS only. WebSocket
+support is not part of the tested integration contract.
+
+See [examples/curl_cffi_client.py](../examples/curl_cffi_client.py) for a runnable
+sync/async client. Python's process-wide `patch()` cannot intercept libcurl
+sockets; use these sessions instead.
+
 For mTLS, certificates, or custom trust roots, use the client’s usual options:
-Requests `verify`/`cert`, aiohttp `ssl`, and HTTPX transport `verify`/`cert`.
+Requests `verify`/`cert`, aiohttp `ssl`, HTTPX transport `verify`/`cert`, and curl_cffi session `verify`/`cert`.
 See [examples/requests_client.py](../examples/requests_client.py),
 [examples/aiohttp_client.py](../examples/aiohttp_client.py), and
 [examples/httpx_client.py](../examples/httpx_client.py) for runnable clients.
@@ -219,7 +257,10 @@ A pooled connection keeps the source address it used when created. With
 transmitted request, including redirect and retry attempts. This does not mean a unique IP: fixed and sticky
 sources keep selecting the same address, and random draws may repeat. A live
 streaming response keeps its connection until consumed or closed. HTTPX fresh
-mode requires HTTP/1.1 and rejects HTTP/2.
+mode requires HTTP/1.1 and rejects HTTP/2. curl_cffi fresh mode uses libcurl's
+`FRESH_CONNECT` and `FORBID_REUSE`, forcing a new connection for each transfer
+and closing it afterward. Redirect hops within one transfer may reuse a
+connection; `fresh=True` does not promise a new source for every redirect hop.
 
 ## Optional process-wide patch
 

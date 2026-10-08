@@ -271,7 +271,7 @@ import importlib.abc
 import os
 import sys
 
-blocked = {"requests", "aiohttp", "httpx", "httpcore", "anyio"}
+blocked = {"requests", "aiohttp", "httpx", "httpcore", "anyio", "curl_cffi", "cffi"}
 class BlockOptional(importlib.abc.MetaPathFinder):
     def find_spec(self, fullname, path=None, target=None):
         if fullname.split(".", 1)[0] in blocked:

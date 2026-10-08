@@ -3,7 +3,7 @@
 Use the IPv6 addresses in a prefix routed to your Linux machine, without
 assigning every address to a network interface. freebind-py brings the idea of
 [the original Freebind by blechschmidt](https://github.com/blechschmidt/freebind)
-to Python sockets, Requests, aiohttp, and HTTPX. Credit for the original tool
+to Python sockets, Requests, aiohttp, HTTPX, and curl_cffi. Credit for the original tool
 and its IPv6 source-rotation approach belongs to that project.
 
 ## Why Freebind?
@@ -31,6 +31,7 @@ python -m pip install freebind-py
 python -m pip install 'freebind-py[requests]'
 python -m pip install 'freebind-py[aiohttp]'
 python -m pip install 'freebind-py[httpx]'
+python -m pip install 'freebind-py[curl-cffi]'
 python -m pip install 'freebind-py[all]'
 ```
 
@@ -80,6 +81,22 @@ with requests.Session() as client:
 Install the `requests` extra to use this example. aiohttp and HTTPX integrations
 also support asyncio; HTTPX provides both sync and async transports.
 
+For curl_cffi browser impersonation, use its Freebind session:
+
+```python
+from freebind import Source
+from freebind.curl_cffi import FreebindSession
+
+with FreebindSession(Source("2001:db8:100::/48"), impersonate="chrome") as client:
+    for _ in range(3):
+        response = client.get("https://service.example/", timeout=5)
+        response.raise_for_status()
+        print(response.text)
+```
+
+Install the `curl-cffi` extra. `AsyncFreebindSession` provides the asyncio API.
+These sessions disable environment proxies by default.
+
 ## Source policies and connections
 
 - An IP selects a fixed source address.
@@ -89,7 +106,7 @@ also support asyncio; HTTPX provides both sync and async transports.
 - `bits=` controls how many leading host bits are randomized. For a `/48`,
   `bits=16` varies the next 16 bits, selecting among its `/64` prefixes.
 - HTTP clients pool connections by default. Pass `fresh=True` to an adapter,
-  connector, or transport to create a new connection per request.
+  connector, transport, or curl_cffi session to create a new connection per request.
 
 Freebind allows binding nonlocal addresses; it does not configure routing.
 The machine needs a local route for the source prefix, the peer needs a return
@@ -101,7 +118,7 @@ environment proxies with `trust_env=False`.
 
 The [user guide](https://github.com/minipps/freebind-py/blob/main/docs/README.md)
 covers IPv4/IPv6 source selection, TCP/UDP sockets, asyncio, Requests, aiohttp,
-HTTPX, TLS, pooling, process-wide patching, and troubleshooting.
+HTTPX, curl_cffi browser impersonation, TLS, pooling, process-wide patching, and troubleshooting.
 Documentation and runnable examples are also included in the source distribution
 under `docs/` and `examples/`.
 
