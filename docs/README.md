@@ -1,6 +1,11 @@
 # freebind-py user guide
 
-Use an explicit source policy with Python sockets, Requests, aiohttp, or HTTPX.
+Use a routed IPv6 allocation as a pool of source addresses for Python sockets,
+Requests, aiohttp, or HTTPX. Inspired by and credited to
+[blechschmidt's original Freebind](https://github.com/blechschmidt/freebind),
+this library exposes explicit Python source policies; IPv4 is also supported.
+See the [project README](../README.md#why-freebind) for the original motivation:
+IPv6 source rotation and the difference between address and prefix rate limits.
 The core has no runtime dependencies. Linux and Python 3.11 or newer are required
 for socket operations; async integrations use asyncio.
 
@@ -38,15 +43,15 @@ a `Source` shares its sticky address.
 import socket
 from freebind import Source, random_ip
 
-# Randomize the first 4 host bits; the remaining host bits are zero.
-address = random_ip("198.51.100.0/24", bits=4)
-random_source = Source("198.51.100.0/24", bits=4)
-fixed_source = Source("198.51.100.17")
-sticky_source = Source("198.51.100.0/24", mode="sticky", bits=4)
+# Vary the 16 subnet bits after /48; the remaining 64 bits are zero.
+address = random_ip("2001:db8:100::/48", bits=16)
+random_source = Source("2001:db8:100::/48", bits=16)
+fixed_source = Source("2001:db8:100::17")
+sticky_source = Source("2001:db8:100::/48", mode="sticky", bits=16)
 
 both_families = Source(("198.51.100.0/24", "2001:db8:100::/64"))
 assert both_families.families == frozenset({socket.AF_INET, socket.AF_INET6})
-assert Source("198.51.100.17", strict=False).select(socket.AF_INET6) is None
+assert Source("2001:db8:100::17", strict=False).select(socket.AF_INET) is None
 ```
 
 The documentation-only addresses above will not route on a real network. Replace
@@ -77,14 +82,14 @@ that should be closed normally.
 from freebind import Source, create_connection, new_socket
 import socket
 
-source = Source("198.51.100.17")
+source = Source("2001:db8:100::17")
 with new_socket(source, type=socket.SOCK_DGRAM) as udp:
     udp.settimeout(3)
-    udp.sendto(b"hello", ("peer.example", 9000))
+    udp.sendto(b"hello", ("2001:db8:200::2", 9000))
     reply, peer = udp.recvfrom(65535)
 
 # TCP connection helpers return caller-owned connected sockets.
-sock = create_connection(("peer.example", 9000), source, timeout=3)
+sock = create_connection(("2001:db8:200::2", 9000), source, timeout=3)
 sock.close()
 ```
 
@@ -102,7 +107,7 @@ import asyncio
 from freebind import Source, async_create_connection
 
 async def open_stream(host, port):
-    sock = await async_create_connection((host, port), Source("198.51.100.17"))
+    sock = await async_create_connection((host, port), Source("2001:db8:100::17"))
     try:
         return await asyncio.open_connection(sock=sock)
     except BaseException:
@@ -127,11 +132,11 @@ import requests
 from freebind import Source
 from freebind.requests import FreebindAdapter
 
-source = Source("198.51.100.17")
+source = Source("2001:db8:100::/48")
 with requests.Session() as client:
     client.trust_env = False
-    client.mount("http://", FreebindAdapter(source))
-    client.mount("https://", FreebindAdapter(source))
+    client.mount("http://", FreebindAdapter(source, fresh=True))
+    client.mount("https://", FreebindAdapter(source, fresh=True))
     response = client.get("https://service.example/", timeout=5, verify="ca.pem")
 ```
 
@@ -144,7 +149,7 @@ from freebind import Source
 from freebind.aiohttp import FreebindConnector
 
 async def fetch(url):
-    connector = FreebindConnector(Source("198.51.100.17"))
+    connector = FreebindConnector(Source("2001:db8:100::/48"), fresh=True)
     context = ssl.create_default_context(cafile="ca.pem")
     async with aiohttp.ClientSession(
         connector=connector, trust_env=False
@@ -163,7 +168,7 @@ from freebind import Source
 from freebind.httpx import FreebindTransport
 
 context = ssl.create_default_context(cafile="ca.pem")
-transport = FreebindTransport(Source("198.51.100.17"), verify=context)
+transport = FreebindTransport(Source("2001:db8:100::/48"), fresh=True, verify=context)
 with httpx.Client(transport=transport, trust_env=False) as client:
     response = client.get("https://service.example/", timeout=5)
 ```
@@ -176,7 +181,7 @@ from freebind import Source
 from freebind.httpx import AsyncFreebindTransport
 
 async def fetch(url):
-    transport = AsyncFreebindTransport(Source("198.51.100.17"))
+    transport = AsyncFreebindTransport(Source("2001:db8:100::/48"), fresh=True)
     async with httpx.AsyncClient(transport=transport, trust_env=False) as client:
         response = await client.get(url, timeout=5)
         return response.text
@@ -188,11 +193,30 @@ See [examples/requests_client.py](../examples/requests_client.py),
 [examples/aiohttp_client.py](../examples/aiohttp_client.py), and
 [examples/httpx_client.py](../examples/httpx_client.py) for runnable clients.
 
+### Run the IPv6 examples
+
+Replace the documentation prefix with your routed allocation and use an
+IPv6-capable HTTP endpoint or TCP/UDP echo peer. These commands assume the
+package and the corresponding optional extras are installed:
+
+```sh
+python examples/requests_client.py --source 2001:db8:100::/48 --url https://service.example/ --fresh
+python examples/aiohttp_client.py --source 2001:db8:100::/48 --url https://service.example/ --fresh
+python examples/httpx_client.py --source 2001:db8:100::/48 --url https://service.example/ --fresh --async
+python examples/patch.py --source 2001:db8:100::/48 --host 2001:db8:200::2 --port 9000
+python examples/udp.py --source 2001:db8:100::/48 --peer 2001:db8:200::2 --port 9000 --asyncio
+```
+
+Each HTTP command sends one request. Repeated runs sample new source addresses;
+within a long-lived client, use `fresh=True` to sample for each request.
+UDP keeps one source per socket, including when sending to multiple peers;
+this library does not implement the original tool's `packetrand` packet rewriting.
+
 ### Pooling and fresh connections
 
 A pooled connection keeps the source address it used when created. With
-`fresh=True`, each transmitted request uses a new TCP connection, including
-redirect and retry attempts. This does not mean a unique IP: fixed and sticky
+`fresh=True`, Requests, aiohttp, and HTTPX use a new TCP connection for each
+transmitted request, including redirect and retry attempts. This does not mean a unique IP: fixed and sticky
 sources keep selecting the same address, and random draws may repeat. A live
 streaming response keeps its connection until consumed or closed. HTTPX fresh
 mode requires HTTP/1.1 and rejects HTTP/2.
@@ -209,7 +233,7 @@ TCP/UDP types. Only one Freebind patch may be active at a time; restore its
 ```python
 from freebind import Source, patch
 
-with patch(Source("198.51.100.17"), entrypoint="connect"):
+with patch(Source("2001:db8:100::/48"), entrypoint="connect"):
     pass
 ```
 
@@ -240,9 +264,17 @@ See [examples/patch.py](../examples/patch.py).
 Freebind permits binding a nonlocal source address; it does not make that source
 reachable. The client needs a suitable local route for the source prefix (often
 an AnyIP `local PREFIX dev lo` route), the peer needs a return route, and the
-upstream network must carry the traffic. For example, add `ip route add local PREFIX dev lo` on the client (use
-`ip -6 route add local PREFIX dev lo` for IPv6) and configure the matching return
-route on the peer. For an on-link prefix, the router also needs to resolve the
+upstream network must carry the traffic. For a routed IPv6 allocation, add an
+AnyIP route on the client, replacing this
+documentation prefix with your actual allocation:
+
+```sh
+sudo ip -6 route add local 2001:db8:100::/48 dev lo
+```
+
+Configure the matching return route on your upstream router or peer. An IPv4
+allocation uses `ip route add local PREFIX dev lo` instead. For an on-link
+prefix, the router also needs to resolve the
 source with ARP or IPv6 Neighbor Discovery (ND); a local route alone does not
 configure upstream neighbor discovery. Readiness depends on
 your Linux routes and network hardware. This library changes no routes, sysctls,

@@ -1,7 +1,7 @@
 """Send and print UDP replies from a caller-selected Freebind source.
 
 Run against one or more UDP echo peers, for example:
-    python examples/udp.py --source 192.0.2.10 --peer 198.51.100.2 --port 9000
+    python examples/udp.py --source 2001:db8:100::/48 --peer 2001:db8:200::2 --port 9000
 Add ``--peer`` again to send to another destination. ``--connected`` uses
 send/recv on a single connected UDP peer; ``--asyncio`` uses loop datagrams.
 """
@@ -77,7 +77,7 @@ async def _send_async(args, peers, source):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--source", required=True, help="source IPv4/IPv6 address or CIDR")
+    parser.add_argument("--source", required=True, help="source IP or routed CIDR, e.g. 2001:db8:100::/48 (replace with your allocation)")
     parser.add_argument("--peer", action="append", required=True, help="UDP echo peer; repeat for multiple destinations")
     parser.add_argument("--port", type=int, required=True, help="UDP peer port")
     parser.add_argument("--timeout", type=float, default=3.0)
