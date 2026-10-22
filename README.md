@@ -116,11 +116,11 @@ environment proxies with `trust_env=False`.
 
 ## Documentation
 
-The [user guide](https://github.com/minipps/freebind-py/blob/main/docs/README.md)
-covers IPv4/IPv6 source selection, TCP/UDP sockets, asyncio, Requests, aiohttp,
-HTTPX, curl_cffi browser impersonation, TLS, pooling, process-wide patching, and troubleshooting.
-Documentation and runnable examples are also included in the source distribution
-under `docs/` and `examples/`.
+The [documentation](https://freebind-py.readthedocs.io/) covers IPv4/IPv6 source
+selection, TCP/UDP sockets, asyncio, Requests, aiohttp, HTTPX, curl_cffi browser
+impersonation, TLS, pooling, process-wide patching, troubleshooting, and the API
+reference. Documentation and runnable examples are also included in the source
+distribution under `docs/` and `examples/`.
 
 See [contributing and releases](https://github.com/minipps/freebind-py/blob/main/docs/CONTRIBUTING.md)
 for local setup, linting, tests, and publishing.

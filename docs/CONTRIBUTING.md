@@ -36,16 +36,18 @@ traffic, use:
 .venv/bin/python tests/network_harness.py -- .venv/bin/python -m unittest discover -s tests -p test_network.py -v
 ```
 
-The [CI workflow](../.github/workflows/tests.yml) configures unit jobs for CPython
-3.11–3.14 with minimum and newest allowed optional dependencies, namespace jobs
-for both dependency sets on CPython 3.12, and an ARM64 CPython 3.14 smoke job
-with newest allowed dependencies. This describes configured coverage; consult
-the workflow run status for results for a particular revision.
+The [CI workflow](https://github.com/minipps/freebind-py/blob/main/.github/workflows/tests.yml)
+configures unit jobs for CPython 3.11–3.14 with minimum and newest allowed
+optional dependencies, namespace jobs for both dependency sets on CPython 3.12,
+and an ARM64 CPython 3.14 smoke job with newest allowed dependencies. This
+describes configured coverage; consult the workflow run status for results for
+a particular revision.
 
 ## Publishing and repository security
 
 Publishing is manual and restricted to `minipps` running
-[Publish to PyPI](../.github/workflows/publish.yml) from `main`.
+[Publish to PyPI](https://github.com/minipps/freebind-py/blob/main/.github/workflows/publish.yml)
+from `main`.
 The build verifies that the requested tag belongs to `main`, matches the package
 version, passes unit tests, and produces valid distributions. The separate
 publisher job downloads only this run's artifacts and uses PyPI Trusted

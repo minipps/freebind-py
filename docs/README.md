@@ -4,7 +4,7 @@ Use a routed IPv6 allocation as a pool of source addresses for Python sockets,
 Requests, aiohttp, HTTPX, or curl_cffi. Inspired by and credited to
 [blechschmidt's original Freebind](https://github.com/blechschmidt/freebind),
 this library exposes explicit Python source policies; IPv4 is also supported.
-See the [project README](../README.md#why-freebind) for the original motivation:
+See the [project README](https://github.com/minipps/freebind-py#why-freebind) for the original motivation:
 IPv6 source rotation and the difference between address and prefix rate limits.
 The core has no runtime dependencies. Linux and Python 3.11 or newer are required
 for socket operations; async integrations use asyncio.
@@ -119,8 +119,9 @@ async def open_stream(host, port):
 
 On success, the asyncio writer owns the transferred socket.
 
-See [examples/udp.py](../examples/udp.py) for connected and unconnected UDP, sync
-and asyncio modes. The example expects a reachable UDP echo service.
+See [examples/udp.py](https://github.com/minipps/freebind-py/blob/main/examples/udp.py)
+for connected and unconnected UDP, sync and asyncio modes. The example expects a
+reachable UDP echo service.
 
 ## HTTP clients
 
@@ -221,15 +222,15 @@ async sessions use asyncio. HTTP/2 and HTTP/3 remain managed by libcurl, but the
 integration's network tests currently cover HTTP/1.1 over TLS only. WebSocket
 support is not part of the tested integration contract.
 
-See [examples/curl_cffi_client.py](../examples/curl_cffi_client.py) for a runnable
-sync/async client. Python's process-wide `patch()` cannot intercept libcurl
-sockets; use these sessions instead.
+See [examples/curl_cffi_client.py](https://github.com/minipps/freebind-py/blob/main/examples/curl_cffi_client.py)
+for a runnable sync/async client. Python's process-wide `patch()` cannot intercept
+libcurl sockets; use these sessions instead.
 
 For mTLS, certificates, or custom trust roots, use the client’s usual options:
 Requests `verify`/`cert`, aiohttp `ssl`, HTTPX transport `verify`/`cert`, and curl_cffi session `verify`/`cert`.
-See [examples/requests_client.py](../examples/requests_client.py),
-[examples/aiohttp_client.py](../examples/aiohttp_client.py), and
-[examples/httpx_client.py](../examples/httpx_client.py) for runnable clients.
+See [examples/requests_client.py](https://github.com/minipps/freebind-py/blob/main/examples/requests_client.py),
+[examples/aiohttp_client.py](https://github.com/minipps/freebind-py/blob/main/examples/aiohttp_client.py), and
+[examples/httpx_client.py](https://github.com/minipps/freebind-py/blob/main/examples/httpx_client.py) for runnable clients.
 
 ### Run the IPv6 examples
 
@@ -298,7 +299,7 @@ activates a patch. It requires `FREEBIND_RANDOM` (comma/space-separated IPs or
 CIDRs), optionally reads `FREEBIND_IFACE`, accepts `FREEBIND_TYPE_FILTER=STREAM`
 or `DGRAM`, and accepts `FREEBIND_ENTRYPOINT=socket` or `connect`. The
 entrypoint defaults to `socket` for compatibility with the C launcher.
-See [examples/patch.py](../examples/patch.py).
+See [examples/patch.py](https://github.com/minipps/freebind-py/blob/main/examples/patch.py).
 
 ## Routing and limits
 

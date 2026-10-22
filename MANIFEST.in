@@ -1,5 +1,5 @@
 recursive-include examples *.py
 recursive-include tests *.py *.pem *.key
 include .github/workflows/*.yml
-recursive-include docs *.md
+recursive-include docs *.md *.py *.txt
 include CHANGELOG.md
