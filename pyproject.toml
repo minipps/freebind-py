@@ -29,7 +29,7 @@ all = ["curl_cffi>=0.16.3,<0.17", "requests>=2.34.2,<3", "urllib3>=2.7,<3", "aio
 freebind = ["py.typed"]
 
 [dependency-groups]
-dev = ["ruff==0.17.1"]
+dev = ["ruff==0.17.2"]
 
 [tool.ruff.lint]
 select = ["E4", "E7", "E9", "F"]
